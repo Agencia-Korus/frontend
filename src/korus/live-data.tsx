@@ -2,33 +2,24 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import {
-  academyItems as fallbackAcademy,
-  announcements as fallbackAnnouncements,
-  leads as fallbackLeads,
-  portfolioItems as fallbackPortfolio,
-  projects as fallbackProjects,
-  services as fallbackServices,
-  tasks as fallbackTasks,
-  users as fallbackUsers,
-  type Lead,
-  type Project,
-  type Task,
-  type User,
+import type {
+  AcademyItem,
+  Announcement,
+  Lead,
+  PortfolioItem,
+  Project,
+  Service,
+  Task,
+  User,
 } from "./data/mock";
+import { IMAGES } from "./assets";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUrl } from "./api-client";
 import { useAuth } from "./auth-context";
 
-type Service = Omit<(typeof fallbackServices)[number], "status"> & { status: "ativo" | "inativo" };
-type PortfolioItem = (typeof fallbackPortfolio)[number];
-type AcademyItem = (typeof fallbackAcademy)[number];
 type EntityId = string | number;
 type EditableService = Partial<Omit<Service, "id" | "icon">> & { id?: EntityId; icon?: string };
 type EditablePortfolioItem = Partial<Omit<PortfolioItem, "id">> & { id?: EntityId };
 type EditableAcademyItem = Partial<Omit<AcademyItem, "id" | "type">> & { id?: EntityId; type?: string };
-type Announcement = Omit<(typeof fallbackAnnouncements)[number], "target"> & {
-  target: "funcionarios" | "clientes" | "todos" | "admins";
-};
 
 type AdminDashboardData = {
   cards?: {
@@ -82,14 +73,14 @@ const KorusDataContext = createContext<KorusDataContextValue | null>(null);
 
 export function KorusDataProvider({ children }: { children: React.ReactNode }) {
   const { user, ready } = useAuth();
-  const [services, setServices] = useState<Service[]>(fallbackServices);
-  const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>(fallbackPortfolio);
-  const [academyItems, setAcademyItems] = useState<AcademyItem[]>(fallbackAcademy);
-  const [leads, setLeads] = useState<Lead[]>(fallbackLeads);
-  const [users, setUsers] = useState<User[]>(fallbackUsers);
-  const [projects, setProjects] = useState<Project[]>(fallbackProjects);
-  const [tasks, setTasks] = useState<Task[]>(fallbackTasks);
-  const [announcements, setAnnouncements] = useState<Announcement[]>(fallbackAnnouncements);
+  const [services, setServices] = useState<Service[]>([]);
+  const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
+  const [academyItems, setAcademyItems] = useState<AcademyItem[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [adminDashboard, setAdminDashboard] = useState<AdminDashboardData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,17 +93,14 @@ export function KorusDataProvider({ children }: { children: React.ReactNode }) {
     ]);
 
     if (remoteServices.status === "fulfilled") {
-      const mapped = remoteServices.value.map(mapService);
-      setServices(mapped.length ? mapped : fallbackServices);
+      setServices(remoteServices.value.map(mapService));
       void hydrateDeliverables(remoteServices.value, setServices);
     }
     if (remotePortfolio.status === "fulfilled") {
-      const mapped = remotePortfolio.value.map(mapPortfolio);
-      setPortfolioItems(mapped.length ? mapped : fallbackPortfolio);
+      setPortfolioItems(remotePortfolio.value.map(mapPortfolio));
     }
     if (remoteAcademy.status === "fulfilled") {
-      const mapped = remoteAcademy.value.map(mapAcademy);
-      setAcademyItems(mapped.length ? mapped : fallbackAcademy);
+      setAcademyItems(remoteAcademy.value.map(mapAcademy));
     }
   }, []);
 
@@ -398,7 +386,7 @@ function mapPortfolio(item: ApiPortfolio): PortfolioItem {
     name: item.nome,
     client: item.cliente || "Korus",
     category: item.categoria || "Identidade Visual",
-    image: item.imagem || fallbackPortfolio[0].image,
+    image: item.imagem || IMAGES.branding,
     year: String(item.ano || new Date().getFullYear()),
     description: item.descricao || "",
     tags: item.tags || [],
@@ -414,7 +402,7 @@ function mapAcademy(item: ApiAcademy): AcademyItem {
     type: item.tipo === "ebook" ? "E-book" : "Curso",
     description: item.descricao || "",
     price: price === 0 ? "Gratuito" : price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
-    image: item.imagem || fallbackAcademy[0].image,
+    image: item.imagem || IMAGES.branding,
   };
 }
 
