@@ -1,4 +1,3 @@
-import { xpHistory, badges } from "../../data/mock";
 import { Trophy, Star, Target, Calendar, Award, Flame, Lock } from "lucide-react";
 import { useAuth } from "../../auth-context";
 import { useKorusData } from "../../live-data";
@@ -8,11 +7,18 @@ const iconMap: Record<string, React.ReactNode> = {
   Target: <Target size={24} />, Award: <Award size={24} />, Flame: <Flame size={24} />,
 };
 
+type XpEntry = { date: string; action: string; xp: number };
+type BadgeItem = { id: string; name: string; icon: string; unlocked: boolean };
+
 export function XPPage() {
   const { user } = useAuth();
   const { users } = useKorusData();
-  const currentUser = users.find((u) => u.id === String(user?.id)) || users.find((u) => u.role === "funcionario") || users[1];
+  const currentUser = users.find((u) => u.id === String(user?.id)) || users.find((u) => u.role === "funcionario");
   const ranking = users.filter((u) => u.role === "funcionario").sort((a, b) => (b.xp || 0) - (a.xp || 0));
+
+  // Histórico e conquistas vêm da API de gamificação (a integrar). Sem dados mock.
+  const xpHistory: XpEntry[] = [];
+  const badges: BadgeItem[] = [];
 
   return (
     <div className="space-y-8">
@@ -25,14 +31,14 @@ export function XPPage() {
             <Trophy size={32} className="text-[#F59E0B]" />
           </div>
           <div>
-            <p className="text-[#6B7280]" style={{ fontSize: 14 }}>Nível {currentUser.level} — {currentUser.levelName}</p>
-            <p style={{ fontSize: 32, fontWeight: 700 }} className="text-[#000]">{currentUser.xp?.toLocaleString()} XP</p>
+            <p className="text-[#6B7280]" style={{ fontSize: 14 }}>Nível {currentUser?.level ?? 1}{currentUser?.levelName ? ` — ${currentUser.levelName}` : ""}</p>
+            <p style={{ fontSize: 32, fontWeight: 700 }} className="text-[#000]">{(currentUser?.xp ?? 0).toLocaleString()} XP</p>
           </div>
         </div>
         <div className="w-full bg-[#F3F4F6] rounded-full h-4">
-          <div className="bg-[#39228C] h-4 rounded-full" style={{ width: "62%" }} />
+          <div className="bg-[#39228C] h-4 rounded-full" style={{ width: `${Math.min(100, (currentUser?.xp ?? 0) % 1000 / 10)}%` }} />
         </div>
-        <p className="text-[#6B7280] mt-2" style={{ fontSize: 13 }}>760 XP para Nível {(currentUser.level || 0) + 1}</p>
+        <p className="text-[#6B7280] mt-2" style={{ fontSize: 13 }}>Nível {(currentUser?.level ?? 1) + 1} a caminho</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -49,13 +55,19 @@ export function XPPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[rgba(103,68,170,0.1)]">
-                {xpHistory.map((h, i) => (
-                  <tr key={i}>
-                    <td className="px-4 py-3 text-[#6B7280]" style={{ fontSize: 13 }}>{h.date}</td>
-                    <td className="px-4 py-3 text-[#000]" style={{ fontSize: 13 }}>{h.action}</td>
-                    <td className="px-4 py-3 text-right text-[#39228C]" style={{ fontSize: 13, fontWeight: 600 }}>+{h.xp}</td>
+                {xpHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="px-4 py-8 text-center text-[#6B7280]" style={{ fontSize: 13 }}>Nenhum histórico de XP ainda.</td>
                   </tr>
-                ))}
+                ) : (
+                  xpHistory.map((h, i) => (
+                    <tr key={i}>
+                      <td className="px-4 py-3 text-[#6B7280]" style={{ fontSize: 13 }}>{h.date}</td>
+                      <td className="px-4 py-3 text-[#000]" style={{ fontSize: 13 }}>{h.action}</td>
+                      <td className="px-4 py-3 text-right text-[#39228C]" style={{ fontSize: 13, fontWeight: 600 }}>+{h.xp}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -64,6 +76,9 @@ export function XPPage() {
         {/* Conquistas */}
         <div>
           <h3 className="text-[#000] mb-4" style={{ fontSize: 18, fontWeight: 600 }}>Conquistas</h3>
+          {badges.length === 0 && (
+            <div className="bg-white rounded-xl border border-[rgba(103,68,170,0.15)] p-8 text-center text-[#6B7280]" style={{ fontSize: 13 }}>Nenhuma conquista desbloqueada ainda.</div>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {badges.map((b) => (
               <div key={b.id} className={`p-4 rounded-xl border text-center ${b.unlocked ? "bg-white border-[#F59E0B]/30" : "bg-[#F3F4F6] border-gray-200 opacity-60"}`}>
