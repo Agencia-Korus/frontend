@@ -13,7 +13,7 @@ import type {
   User,
 } from "./data/mock";
 import { IMAGES } from "./assets";
-import { apiDelete, apiGet, apiPatch, apiPost, apiUrl } from "./api-client";
+import { apiDelete, apiGet, apiPatch, apiPost, apiUrl, type AuthUser } from "./api-client";
 import { useAuth } from "./auth-context";
 
 type EntityId = string | number;
@@ -92,8 +92,10 @@ export function KorusDataProvider({ children }: { children: React.ReactNode }) {
       apiGet<ApiAcademy[]>("/academy?limit=100&publicado=true"),
     ]);
 
+    let servicosAtuais: Service[] = [];
     if (remoteServices.status === "fulfilled") {
-      setServices(remoteServices.value.map(mapService));
+      servicosAtuais = remoteServices.value.map(mapService);
+      setServices(servicosAtuais);
       void hydrateDeliverables(remoteServices.value, setServices);
     }
     if (remotePortfolio.status === "fulfilled") {
@@ -102,10 +104,11 @@ export function KorusDataProvider({ children }: { children: React.ReactNode }) {
     if (remoteAcademy.status === "fulfilled") {
       setAcademyItems(remoteAcademy.value.map(mapAcademy));
     }
+    return servicosAtuais;
   }, []);
 
-  const loadPrivate = useCallback(async () => {
-    if (!user) {
+  const loadPrivate = useCallback(async (usuarioAtual: AuthUser | null, servicosAtuais: Service[]) => {
+    if (!usuarioAtual) {
       setAdminDashboard(null);
       return;
     }
@@ -120,7 +123,7 @@ export function KorusDataProvider({ children }: { children: React.ReactNode }) {
     if (remoteTasks.status === "fulfilled") setTasks(remoteTasks.value.map(mapTask));
     if (remoteAnnouncements.status === "fulfilled") setAnnouncements(remoteAnnouncements.value.map(mapAnnouncement));
 
-    if (user.role !== "admin") return;
+    if (usuarioAtual.role !== "admin") return;
 
     const [remoteUsers, remoteLeads, remoteDashboard] = await Promise.allSettled([
       apiGet<ApiUser[]>("/usuarios?limit=100", true),
@@ -129,23 +132,23 @@ export function KorusDataProvider({ children }: { children: React.ReactNode }) {
     ]);
 
     if (remoteUsers.status === "fulfilled") setUsers(remoteUsers.value.map(mapUser));
-    if (remoteLeads.status === "fulfilled") setLeads(remoteLeads.value.map((lead) => mapLead(lead, services)));
+    if (remoteLeads.status === "fulfilled") setLeads(remoteLeads.value.map((lead) => mapLead(lead, servicosAtuais)));
     if (remoteDashboard.status === "fulfilled") setAdminDashboard(remoteDashboard.value);
-  }, [services, user]);
+  }, []);
 
   const refresh = useCallback(async () => {
     if (!ready) return;
     setLoading(true);
     setError(null);
     try {
-      await loadPublic();
-      await loadPrivate();
+      const servicosAtuais = await loadPublic();
+      await loadPrivate(user, servicosAtuais);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível carregar dados da API.");
     } finally {
       setLoading(false);
     }
-  }, [loadPrivate, loadPublic, ready]);
+  }, [ready, user, loadPublic, loadPrivate]);
 
   useEffect(() => {
     void refresh();

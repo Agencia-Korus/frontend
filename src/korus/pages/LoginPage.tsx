@@ -70,16 +70,6 @@ export function LoginPage() {
             Não tem conta?{" "}
             <Link to="/cadastro" className="text-[#39228C] hover:text-[#6744AA]" style={{ fontWeight: 500 }}>Cadastre-se</Link>
           </p>
-
-          <div className="mt-8 p-4 bg-[#F9FAFB] rounded-lg">
-            <p className="text-[#6B7280] mb-2" style={{ fontSize: 12, fontWeight: 500 }}>Logins de teste:</p>
-            <div className="space-y-1" style={{ fontSize: 12 }}>
-              <p className="text-[#000]"><strong>Admin:</strong> carlos@korusagencia.com.br</p>
-              <p className="text-[#000]"><strong>Func:</strong> ana@korusagencia.com.br</p>
-              <p className="text-[#000]"><strong>Cliente:</strong> contato@techsol.com.br</p>
-              <p className="text-[#6B7280]">Senha padrão dos seeds: senha-forte-123</p>
-            </div>
-          </div>
         </div>
       </div>
     </div>
