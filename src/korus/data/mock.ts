@@ -101,8 +101,8 @@ export function getStatusLabel(status: string) {
   const map: Record<string, string> = {
     a_fazer: "A Fazer",
     em_andamento: "Em Andamento",
-    em_revisao: "Em RevisÃ£o",
-    concluido: "ConcluÃ­do",
+    em_revisao: "Em Revisão",
+    concluido: "Concluído",
     novo: "Novo",
     em_contato: "Em Contato",
     proposta_enviada: "Proposta Enviada",
@@ -130,13 +130,3 @@ export function getStatusColor(status: string) {
 export function getPriorityColor(p: string) {
   return p === "alta" ? "bg-[#EF4444] text-white" : p === "media" ? "bg-[#F59E0B] text-white" : "bg-gray-400 text-white";
 }
-
-export const xpHistory = [
-  { id: 1, action: "Projeto entregue", xp: 50, date: "2026-06-10" },
-  { id: 2, action: "Revisão aprovada", xp: 20, date: "2026-06-12" }
-];
-
-export const badges = [
-  { id: 1, name: "Iniciante", icon: "Star", description: "Primeiros passos", unlocked: true },
-  { id: 2, name: "Especialista", icon: "Award", description: "Entregou 10 projetos", unlocked: false }
-];
