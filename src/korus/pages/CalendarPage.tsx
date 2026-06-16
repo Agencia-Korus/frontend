@@ -277,7 +277,7 @@ export function CalendarPage({ title = "Agenda", currentUserId = "ana" }: { titl
                     <div className="flex-1">
                       <p className="text-[#000] dark:text-white" style={{ fontSize: 14, fontWeight: 600 }}>{r.title}</p>
                       <p className="text-[#6B7280] dark:text-white/60" style={{ fontSize: 12 }}>De: {personName(r.fromId)} · {r.date} às {r.time}</p>
-                      {r.message && <p className="text-[#6B7280] dark:text-white/70 mt-2" style={{ fontSize: 12 }}>"{r.message}"</p>}
+                      {r.message && <p className="text-[#6B7280] dark:text-white/70 mt-2" style={{ fontSize: 12 }}>&quot;{r.message}&quot;</p>}
                     </div>
                     <span className={`px-2 py-0.5 rounded-full ${
                       r.status === "pendente" ? "bg-amber-100 text-amber-700" :

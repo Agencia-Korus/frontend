@@ -288,7 +288,7 @@ export function Landing() {
                 <div className="flex gap-1 mb-4">
                   {[...Array(5)].map((_, i) => <Star key={i} size={16} className="fill-[#F59E0B] text-[#F59E0B]" />)}
                 </div>
-                <p className="text-[#000] mb-4" style={{ fontSize: 14, lineHeight: 1.6 }}>"{t.text}"</p>
+                <p className="text-[#000] mb-4" style={{ fontSize: 14, lineHeight: 1.6 }}>&quot;{t.text}&quot;</p>
                 <div className="flex items-center gap-3">
                   <img src={t.avatar} alt={t.name} className="w-10 h-10 rounded-full object-cover" />
                   <div>
