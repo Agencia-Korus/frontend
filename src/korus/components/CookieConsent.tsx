@@ -1,20 +1,33 @@
-import { useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Cookie, X } from "lucide-react";
 
 const STORAGE_KEY = "korus-cookie-consent";
+const CHANGE_EVENT = "korus-cookie-consent-change";
+
+function subscribe(callback: () => void) {
+  window.addEventListener("storage", callback);
+  window.addEventListener(CHANGE_EVENT, callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(CHANGE_EVENT, callback);
+  };
+}
 
 export function CookieConsent() {
-  const [visible, setVisible] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return !localStorage.getItem(STORAGE_KEY);
-  });
+  // Server and the initial client render both see "ssr", so they match;
+  // after hydration the client reads the real value from localStorage.
+  const consent = useSyncExternalStore(
+    subscribe,
+    () => localStorage.getItem(STORAGE_KEY),
+    () => "ssr",
+  );
 
   const decide = (value: "all" | "essential" | "rejected") => {
     localStorage.setItem(STORAGE_KEY, value);
-    setVisible(false);
+    window.dispatchEvent(new Event(CHANGE_EVENT));
   };
 
-  if (!visible) return null;
+  if (consent !== null) return null;
 
   return (
     <div className="fixed bottom-4 left-4 right-4 sm:left-6 sm:right-auto sm:max-w-md z-50">
@@ -30,21 +43,21 @@ export function CookieConsent() {
               <a href="#politica" className="text-[#39228C] dark:text-[#A78BFA] underline">Política de Privacidade</a>.
             </p>
           </div>
-          <button onClick={() => decide("rejected")} aria-label="Fechar" className="text-[#6B7280] hover:text-[#000] dark:hover:text-white">
+          <button onClick={() => decide("rejected")} aria-label="Fechar" className="cursor-pointer text-[#6B7280] hover:text-[#000] dark:hover:text-white">
             <X size={18} />
           </button>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
           <button
             onClick={() => decide("all")}
-            className="flex-1 px-4 py-2 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA] transition-colors"
+            className="flex-1 cursor-pointer px-4 py-2 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA] transition-colors"
             style={{ fontSize: 13, fontWeight: 500 }}
           >
             Aceitar todos
           </button>
           <button
             onClick={() => decide("essential")}
-            className="flex-1 px-4 py-2 border border-[#6744AA] text-[#6744AA] dark:text-[#A78BFA] dark:border-[#A78BFA] rounded-lg hover:bg-[#6744AA]/5 transition-colors"
+            className="flex-1 cursor-pointer px-4 py-2 border border-[#6744AA] text-[#6744AA] dark:text-[#A78BFA] dark:border-[#A78BFA] rounded-lg hover:bg-[#6744AA]/5 transition-colors"
             style={{ fontSize: 13, fontWeight: 500 }}
           >
             Apenas essenciais

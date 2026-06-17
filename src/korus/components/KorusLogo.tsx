@@ -1,43 +1,41 @@
-// Logo variants following the Korus brand identity manual
-import { IMAGES } from "../assets";
+// Logo variants following the Korus brand identity manual.
+// Rendered as inline SVGs (see KorusBrand) using `currentColor`, so each
+// variant just picks a text color and the marks adapt to light/dark.
+import { KorusWordmark, KorusIcon } from "./KorusBrand";
+
+const sizeMap = { sm: "h-8", md: "h-10", lg: "h-14" };
 
 /**
  * variant:
- * - "dark" → roxo escuro horizontal on white bg (for Navbar/light backgrounds)
- * - "light" → white vertical on roxo escuro bg (for Footer/Sidebar dark backgrounds)
- * - "black" → black horizontal on white bg (for neutral contexts)
- * - "azul" → azul noturno horizontal on white bg
+ * - "dark"  → roxo escuro (for light backgrounds)
+ * - "light" → white (for dark backgrounds)
+ * - "black" → black (for neutral contexts)
+ * - "azul"  → azul noturno
  */
 export function KorusLogo({
   variant = "dark",
   size = "sm",
+  className = "",
 }: {
   variant?: "dark" | "light" | "black" | "azul";
   size?: "sm" | "md" | "lg";
+  className?: string;
 }) {
-  const sizeMap = { sm: "h-8", md: "h-10", lg: "h-14" };
-
-  const logoMap = {
-    dark: IMAGES.logoHorizontalRoxo,
-    light: IMAGES.logoVerticalBrancoRoxo,
-    black: IMAGES.logoHorizontalPreto,
-    azul: IMAGES.logoHorizontalAzul,
+  const colorMap = {
+    dark: "text-[#39228C]",
+    light: "text-white",
+    black: "text-black",
+    azul: "text-[#0C0819]",
   };
 
-  return (
-    <img
-      src={logoMap[variant]}
-      alt="Korus"
-      className={`${sizeMap[size]} object-contain ${variant === "light" ? "rounded-lg" : ""}`}
-    />
-  );
+  return <KorusWordmark className={`${sizeMap[size]} w-auto ${colorMap[variant]} ${className}`} />;
 }
 
 /**
- * Symbol-only (icon) variant
- * - "dark" → roxo claro icon on white bg (for light backgrounds)
- * - "light" → white icon on black bg (for dark backgrounds)
- * - "azul" → white icon on azul noturno bg
+ * Symbol-only (icon) variant.
+ * - "dark"  → roxo claro (for light backgrounds)
+ * - "light" → white (for dark backgrounds)
+ * - "azul"  → azul noturno
  */
 export function KorusSymbol({
   variant = "dark",
@@ -46,17 +44,11 @@ export function KorusSymbol({
   variant?: "dark" | "light" | "azul";
   className?: string;
 }) {
-  const iconMap = {
-    dark: IMAGES.iconeRoxoClaro,
-    light: IMAGES.iconeBrancoPreto,
-    azul: IMAGES.iconeBrancoAzul,
+  const colorMap = {
+    dark: "text-[#6744AA]",
+    light: "text-white",
+    azul: "text-[#0C0819]",
   };
 
-  return (
-    <img
-      src={iconMap[variant]}
-      alt="Korus"
-      className={`${className || "h-8 w-8"} object-contain rounded-lg`}
-    />
-  );
+  return <KorusIcon className={`${className || "h-8 w-8"} ${colorMap[variant]}`} />;
 }

@@ -20,12 +20,12 @@ export function Navbar() {
   return (
     <>
       <nav className="sticky top-0 z-40 bg-white/90 dark:bg-[#0F1115]/90 backdrop-blur-xl border-b border-[rgba(103,68,170,0.1)] dark:border-white/10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-8 flex items-center justify-between h-16">
-          <Link to="/" className="dark:[&_img]:brightness-150 dark:[&_img]:contrast-125">
-            <KorusLogo variant="dark" size="md" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 flex items-center justify-between md:grid md:grid-cols-[1fr_auto_1fr] h-16">
+          <Link to="/" className="justify-self-start">
+            <KorusLogo variant="dark" size="md" className="dark:text-white" />
           </Link>
 
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden md:flex items-center gap-8 justify-self-center">
             {navLinks.map((l) => (
               <Link key={l.href} to={l.href} className="text-[#000] dark:text-[#E6E8EB] hover:text-[#39228C] dark:hover:text-[#A78BFA] transition-colors" style={{ fontSize: 15 }}>
                 {l.label}
@@ -33,7 +33,7 @@ export function Navbar() {
             ))}
           </div>
 
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-3 justify-self-end">
             <ThemeToggle />
             <button onClick={() => navigate("/login")} className="px-4 py-2 border border-[#6744AA] dark:border-[#A78BFA] text-[#6744AA] dark:text-[#A78BFA] rounded-lg hover:bg-[#6744AA]/5 dark:hover:bg-[#A78BFA]/10 transition-colors" style={{ fontSize: 14 }}>
               Entrar

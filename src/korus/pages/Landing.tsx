@@ -5,6 +5,7 @@ import { Footer } from "../components/Footer";
 import { IMAGES } from "../assets";
 import { Palette, Share2, Globe, FileText, TrendingUp, Camera, Star, ArrowRight, CheckCircle, Mail, Phone, MapPin, Kanban, Users, Trophy } from "lucide-react";
 import { SupabaseImage } from "../components/SupabaseImage";
+import { KorusSymbol } from "../components/KorusLogo";
 import { useKorusData } from "../live-data";
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -125,10 +126,10 @@ export function Landing() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {steps.map((s, i) => (
               <div key={s.num} className="relative">
-                <span className="text-[#39228C]/15" style={{ fontSize: 64, fontWeight: 700, lineHeight: 1 }}>{s.num}</span>
+                <span className="text-[#39228C]/30 dark:text-[#A78BFA]/40" style={{ fontSize: 64, fontWeight: 700, lineHeight: 1 }}>{s.num}</span>
                 <h3 style={{ fontSize: 18, fontWeight: 600 }} className="text-[#000] mt-2 mb-2">{s.title}</h3>
                 <p className="text-[#6B7280]" style={{ fontSize: 14, lineHeight: 1.6 }}>{s.desc}</p>
-                {i < 3 && <div className="hidden lg:block absolute top-8 right-0 w-8 h-0.5 bg-[#39228C]/20 translate-x-full" />}
+                {i < 3 && <div className="hidden lg:block absolute top-8 right-0 w-8 h-0.5 bg-[#39228C]/20 dark:bg-[#A78BFA]/40 translate-x-full" />}
               </div>
             ))}
           </div>
@@ -305,6 +306,7 @@ export function Landing() {
       {/* CTA */}
       <section className="py-16 sm:py-24 bg-[#39228C]">
         <div className="max-w-3xl mx-auto px-4 sm:px-8 text-center">
+          <KorusSymbol variant="light" className="h-16 w-16 mx-auto mb-6" />
           <h2 className="text-white mb-4" style={{ fontSize: "clamp(1.5rem, 4vw, 2.5rem)" }}>Pronto para elevar sua marca?</h2>
           <p className="text-white/70 mb-8" style={{ fontSize: 16 }}>Entre em contato conosco e descubra como podemos transformar sua comunicação.</p>
           <button onClick={() => navigate("/solicitar/identidade-visual")} className="px-8 py-3 bg-white text-[#39228C] rounded-lg hover:bg-white/90 transition-colors" style={{ fontWeight: 600 }}>

@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import { Link, useNavigate } from "@/src/korus/router-adapter";
-import { IMAGES } from "../assets";
 import { KorusLogo } from "../components/KorusLogo";
+import { KorusIcon } from "../components/KorusBrand";
 import { useAuth } from "../auth-context";
 import { ApiError } from "../api-client";
 
@@ -33,7 +34,7 @@ export function LoginPage() {
     <div className="min-h-screen flex">
       {/* Left */}
       <div className="hidden lg:flex flex-1 bg-[#0C0819] flex-col items-center justify-center p-12 relative overflow-hidden">
-        <img src={IMAGES.logoVerticalBrancoRoxo} alt="Korus" className="w-40 h-40 rounded-2xl object-contain mb-8 relative z-10" />
+        <KorusIcon className="w-40 h-40 text-white mb-8 relative z-10" />
         <p className="text-white/80 text-center max-w-sm relative z-10" style={{ fontSize: 18, lineHeight: 1.6 }}>
           Transformamos sua comunicação em resultado.
         </p>
@@ -42,6 +43,10 @@ export function LoginPage() {
       {/* Right */}
       <div className="flex-1 flex items-center justify-center p-8 bg-white">
         <div className="w-full max-w-md">
+          <Link to="/" className="inline-flex items-center gap-1.5 mb-8 text-[#6B7280] hover:text-[#39228C] transition-colors" style={{ fontSize: 14 }}>
+            <ArrowLeft size={16} />
+            Voltar para a tela inicial
+          </Link>
           <div className="lg:hidden mb-8">
             <KorusLogo variant="dark" size="md" />
           </div>
