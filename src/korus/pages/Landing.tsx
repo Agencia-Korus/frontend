@@ -14,9 +14,9 @@ const iconMap: Record<string, React.ReactNode> = {
 };
 
 const stats = [
-  { value: "120+", label: "Projetos" },
-  { value: "98%", label: "Satisfação" },
-  { value: "5", label: "Anos no Mercado" },
+  { value: "100+", label: "Projetos realizados" },
+  { value: "100%", label: "Satisfação" },
+  { value: "2", label: "Anos no mercado" },
 ];
 
 const steps = [
@@ -76,7 +76,7 @@ export function Landing() {
             </div>
           </div>
           <div className="flex-1 max-w-md lg:max-w-lg">
-            <SupabaseImage src={IMAGES.agency} alt="Agência Korus" className="rounded-2xl shadow-lg shadow-[#39228C]/10 w-full" />
+            <img src="/hero.webp" alt="Agência Korus" className="rounded-2xl shadow-lg shadow-[#39228C]/10 w-full" />
           </div>
         </div>
         <div className="w-full max-w-7xl mx-auto px-4 sm:px-8 mt-10">
@@ -291,7 +291,7 @@ export function Landing() {
                 </div>
                 <p className="text-[#000] mb-4" style={{ fontSize: 14, lineHeight: 1.6 }}>&quot;{t.text}&quot;</p>
                 <div className="flex items-center gap-3">
-                  <img src={t.avatar} alt={t.name} className="w-10 h-10 rounded-full object-cover" />
+                  <SupabaseImage src={t.avatar} alt={t.name} className="w-10 h-10 rounded-full object-cover" />
                   <div>
                     <p style={{ fontSize: 14, fontWeight: 600 }} className="text-[#000]">{t.name}</p>
                     <p style={{ fontSize: 12 }} className="text-[#6B7280]">{t.company}</p>

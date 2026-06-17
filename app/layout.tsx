@@ -22,6 +22,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" className="h-full antialiased" suppressHydrationWarning>
+      <head>
+        {/* Aplica o tema salvo antes da pintura para evitar flash (FOUC). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('korus-theme');var d=t?t==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',d);}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className="min-h-full">
         <KorusProviders>{children}</KorusProviders>
       </body>
