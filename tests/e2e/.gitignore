@@ -1,0 +1,12 @@
+# Python virtualenv
+.venv/
+venv/
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Selenium / browser artifacts
+*.log
+screenshots/

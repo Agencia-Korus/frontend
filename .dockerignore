@@ -20,6 +20,7 @@ build/
 .vercel/
 
 # Tests and testing output (not needed in production images)
+tests/
 coverage/
 .nyc_output/
 __tests__/
