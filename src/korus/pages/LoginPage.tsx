@@ -63,9 +63,6 @@ export function LoginPage() {
               <label className="block mb-1 text-[#000]" style={{ fontSize: 14 }}>Senha</label>
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="w-full px-4 py-2.5 border border-[rgba(103,68,170,0.3)] rounded-lg focus:border-[#6744AA] focus:outline-none" />
             </div>
-            <div className="text-right">
-              <a href="#" className="text-[#39228C] hover:text-[#6744AA]" style={{ fontSize: 13 }}>Esqueci minha senha</a>
-            </div>
             <button type="submit" disabled={loading} className="w-full py-3 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA] transition-colors disabled:opacity-60">
               {loading ? "Entrando..." : "Entrar"}
             </button>

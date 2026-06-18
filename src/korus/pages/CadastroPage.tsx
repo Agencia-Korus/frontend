@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "@/src/korus/router-adapter";
-import { IMAGES } from "../assets";
 import { KorusLogo } from "../components/KorusLogo";
+import { KorusIcon } from "../components/KorusBrand";
 import { useAuth } from "../auth-context";
 import { ApiError } from "../api-client";
 
@@ -73,7 +73,7 @@ export function CadastroPage() {
   return (
     <div className="min-h-screen flex">
       <div className="hidden lg:flex flex-1 bg-[#0C0819] flex-col items-center justify-center p-12 relative overflow-hidden">
-        <img src={IMAGES.logoVerticalBrancoRoxo} alt="Korus" className="w-40 h-40 rounded-2xl object-cover mb-8 relative z-10" />
+        <KorusIcon className="w-40 h-40 text-white mb-8 relative z-10" />
         <p className="text-white/80 text-center max-w-sm relative z-10" style={{ fontSize: 18, lineHeight: 1.6 }}>
           Crie sua conta e comece a transformar sua marca.
         </p>
