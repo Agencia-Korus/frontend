@@ -21,18 +21,42 @@ const targetMeta: Record<Target, { label: string; icon: typeof Users; color: str
 };
 
 export function AdminFeed() {
-  const { announcements, createAnnouncement, deleteAnnouncement } = useKorusData();
+  const { announcements, createAnnouncement, updateAnnouncement, deleteAnnouncement } = useKorusData();
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | number | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [target, setTarget] = useState<Target>("todos");
   const [error, setError] = useState<string | null>(null);
 
+  const openNew = () => {
+    setEditingId(null);
+    setTitle("");
+    setContent("");
+    setTarget("todos");
+    setError(null);
+    setShowModal(true);
+  };
+
+  const openEdit = (a: Announcement) => {
+    setEditingId(a.id);
+    setTitle(a.title);
+    setContent(a.content);
+    setTarget(a.target);
+    setError(null);
+    setShowModal(true);
+  };
+
   const submit = async () => {
     if (!title.trim() || !content.trim()) return;
     setError(null);
     try {
-      await createAnnouncement({ title, content, target });
+      if (editingId !== null) {
+        await updateAnnouncement(editingId, { title, content, target });
+      } else {
+        await createAnnouncement({ title, content, target });
+      }
+      setEditingId(null);
       setTitle("");
       setContent("");
       setTarget("todos");
@@ -46,7 +70,7 @@ export function AdminFeed() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h2 className="text-[#000] dark:text-white">Publicar Comunicados</h2>
-        <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-4 py-2 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA]" style={{ fontSize: 14 }}>
+        <button onClick={openNew} className="flex items-center gap-2 px-4 py-2 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA]" style={{ fontSize: 14 }}>
           <Plus size={16} /> Novo Comunicado
         </button>
       </div>
@@ -77,8 +101,8 @@ export function AdminFeed() {
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  <button className="p-2 text-[#6B7280] hover:text-[#39228C]"><Edit size={14} /></button>
-                  <button onClick={() => void deleteAnnouncement(a.id).catch((err) => setError(err instanceof Error ? err.message : "Erro ao excluir comunicado."))} className="p-2 text-[#6B7280] hover:text-[#EF4444]"><Trash2 size={14} /></button>
+                  <button onClick={() => openEdit(a)} className="p-2 text-[#6B7280] hover:text-[#39228C]" title="Editar"><Edit size={14} /></button>
+                  <button onClick={() => void deleteAnnouncement(a.id).catch((err) => setError(err instanceof Error ? err.message : "Erro ao excluir comunicado."))} className="p-2 text-[#6B7280] hover:text-[#EF4444]" title="Excluir"><Trash2 size={14} /></button>
                 </div>
               </div>
               <p className="text-[#6B7280] dark:text-white/70 mt-3" style={{ fontSize: 14 }}>{a.content}</p>
@@ -92,7 +116,7 @@ export function AdminFeed() {
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowModal(false)} />
           <div className="relative bg-white dark:bg-[#130D22] rounded-2xl max-w-lg w-full p-6">
             <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 text-[#6B7280]"><X size={20} /></button>
-            <h3 className="text-[#000] dark:text-white mb-6">Novo Comunicado</h3>
+            <h3 className="text-[#000] dark:text-white mb-6">{editingId !== null ? "Editar Comunicado" : "Novo Comunicado"}</h3>
             <div className="space-y-4">
               <div>
                 <label className="block mb-1 text-[#000] dark:text-white" style={{ fontSize: 14 }}>Título</label>
@@ -137,7 +161,7 @@ export function AdminFeed() {
                 )}
               </div>
               {error && <p className="text-[#EF4444]" style={{ fontSize: 13 }}>{error}</p>}
-              <button onClick={submit} className="w-full py-3 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA]">Publicar</button>
+              <button onClick={submit} className="w-full py-3 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA]">{editingId !== null ? "Salvar alterações" : "Publicar"}</button>
             </div>
           </div>
         </div>

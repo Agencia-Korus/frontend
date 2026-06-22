@@ -41,9 +41,26 @@ export function AcademyPage() {
                   <p className="text-[#6B7280] mb-3" style={{ fontSize: 13, lineHeight: 1.5 }}>{a.description}</p>
                   <div className="flex items-center justify-between">
                     <span className="text-[#39228C]" style={{ fontSize: 14, fontWeight: 600 }}>{a.price}</span>
-                    <button className="px-3 py-1.5 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA] transition-colors" style={{ fontSize: 13 }}>
-                      {a.price === "Gratuito" ? "Baixar" : "Comprar"}
-                    </button>
+                    {a.url ? (
+                      <a
+                        href={a.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA] transition-colors"
+                        style={{ fontSize: 13 }}
+                      >
+                        {a.price === "Gratuito" ? "Acessar" : "Comprar"}
+                      </a>
+                    ) : (
+                      <button
+                        disabled
+                        title="Link de compra não configurado"
+                        className="px-3 py-1.5 bg-[#39228C]/40 text-white rounded-lg cursor-not-allowed"
+                        style={{ fontSize: 13 }}
+                      >
+                        {a.price === "Gratuito" ? "Acessar" : "Comprar"}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "@/src/korus/router-adapter";
 import { getStatusLabel, type Task } from "../data/mock";
 import {
-  Plus, MoreHorizontal, X, MessageSquare, Lock, Eye, Paperclip,
-  CheckSquare, Calendar, Edit3, Trash2, Tag, UserPlus, Send,
+  Plus, MoreHorizontal, X, MessageSquare, Lock, Eye,
+  Calendar, Edit3, Trash2, Send,
   AlertCircle, Clock,
 } from "lucide-react";
 import { useKorusData } from "../live-data";
+import { apiGet, apiPost } from "../api-client";
+import { useAuth } from "../auth-context";
 
 interface KanbanProps {
   mode: "cliente" | "funcionario" | "admin";
@@ -45,6 +47,8 @@ interface Comment {
   timestamp: string;
 }
 
+type ApiComment = { id: number; tarefa_id: number; autor_id: number; conteudo: string; criado_em: string };
+
 type TaskType = Omit<Task, "status"> & {
   status: TaskStatus;
   comments?: Comment[];
@@ -52,6 +56,7 @@ type TaskType = Omit<Task, "status"> & {
 
 export function KanbanBoard({ mode, currentUserId = "2" }: KanbanProps) {
   const { id } = useParams();
+  const { user } = useAuth();
   const { tasks, projects, users, updateTask, createTask, deleteTask: deleteRemoteTask } = useKorusData();
   const project = projects.find((p) => p.id === id);
   const [projectTasks, setProjectTasks] = useState<TaskType[]>([]);
@@ -72,15 +77,31 @@ export function KanbanBoard({ mode, currentUserId = "2" }: KanbanProps) {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setProjectTasks(
-      tasks.filter((t) => t.projectId === id).map((t) => ({
-        ...t,
-        comments: [
-          { id: "c1", userId: "1", text: "Iniciando o trabalho nesta tarefa.", timestamp: "14/04/2026 10:30" },
-        ],
-      })),
+      tasks.filter((t) => t.projectId === id).map((t) => ({ ...t, comments: [] })),
     );
     nextTaskId.current = tasks.length + 1;
   }, [id, tasks]);
+
+  const loadComments = useCallback(async (taskId: string) => {
+    try {
+      const remote = await apiGet<ApiComment[]>(`/tarefas/${taskId}/comentarios`, true);
+      const comments: Comment[] = remote.map((c) => ({
+        id: String(c.id),
+        userId: String(c.autor_id),
+        text: c.conteudo,
+        timestamp: new Date(c.criado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+      }));
+      setProjectTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, comments } : t)));
+      setSelectedTask((prev) => (prev && prev.id === taskId ? { ...prev, comments } : prev));
+    } catch {
+      // Tarefas recém-criadas localmente ainda não existem na API.
+    }
+  }, []);
+
+  const openTask = useCallback((task: TaskType) => {
+    setSelectedTask(task);
+    if (/^\d+$/.test(task.id)) void loadComments(task.id);
+  }, [loadComments]);
 
   const canEdit = mode === "admin" || mode === "funcionario";
   const canDrag = (taskId: string) => {
@@ -120,10 +141,11 @@ export function KanbanBoard({ mode, currentUserId = "2" }: KanbanProps) {
 
   const addComment = () => {
     if (!newComment.trim() || !selectedTask) return;
+    const text = newComment.trim();
     const comment: Comment = {
       id: `c${Date.now()}`,
-      userId: currentUserId,
-      text: newComment.trim(),
+      userId: String(user?.id || currentUserId),
+      text,
       timestamp: new Date().toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }),
     };
     const updated = {
@@ -134,6 +156,23 @@ export function KanbanBoard({ mode, currentUserId = "2" }: KanbanProps) {
     setProjectTasks((prev) => prev.map((t) => t.id === updated.id ? updated : t));
     setNewComment("");
     showToast("Comentário adicionado!");
+    if (/^\d+$/.test(selectedTask.id)) {
+      void apiPost(`/tarefas/${selectedTask.id}/comentarios`, { conteudo: text }, true)
+        .then(() => loadComments(selectedTask.id))
+        .catch(() => undefined);
+    }
+  };
+
+  const assignResponsible = (taskId: string, responsible: string) => {
+    setProjectTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, responsible } : t)));
+    setSelectedTask((prev) => (prev && prev.id === taskId ? { ...prev, responsible } : prev));
+    void updateTask(taskId, { responsible }).catch(() => undefined);
+  };
+
+  const changeDueDate = (taskId: string, dueDate: string) => {
+    setProjectTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, dueDate } : t)));
+    setSelectedTask((prev) => (prev && prev.id === taskId ? { ...prev, dueDate } : prev));
+    void updateTask(taskId, { dueDate }).catch(() => undefined);
   };
 
   const saveTitle = () => {
@@ -183,12 +222,12 @@ export function KanbanBoard({ mode, currentUserId = "2" }: KanbanProps) {
       status: colKey,
       priority: "media",
       category: "Geral",
-      responsible: currentUserId,
-      dueDate: "30/04/2026",
+      responsible: "",
+      dueDate: "",
       comments: [],
     };
     setProjectTasks((prev) => [...prev, newTask]);
-    void createTask(newTask).catch(() => undefined);
+    void createTask(newTask).catch((err) => showToast(err instanceof Error ? err.message : "Erro ao salvar cartão."));
     setNewCardTitle("");
     setAddingCard(null);
     showToast("Cartão adicionado!");
@@ -274,7 +313,7 @@ export function KanbanBoard({ mode, currentUserId = "2" }: KanbanProps) {
                       draggable={draggable}
                       onDragStart={() => setDraggedTask(task.id)}
                       onDragEnd={() => { setDraggedTask(null); setDragOverCol(null); }}
-                      onClick={() => setSelectedTask(task)}
+                      onClick={() => openTask(task)}
                       className={`bg-white rounded-lg shadow-sm border border-[#E0E0E0] cursor-pointer hover:border-[#39228C]/40 hover:shadow-md transition-all ${
                         draggedTask === task.id ? "opacity-40 rotate-1 scale-105" : ""
                       } ${!draggable && mode === "cliente" ? "cursor-default" : ""}`}
@@ -358,9 +397,13 @@ export function KanbanBoard({ mode, currentUserId = "2" }: KanbanProps) {
 
       {/* Task Detail Modal */}
       {selectedTask && (() => {
-        const user = users.find((u) => u.id === selectedTask.responsible);
+        const assignedUser = users.find((u) => u.id === selectedTask.responsible);
         const labels = getTaskLabels(selectedTask.category);
         const colLabel = columns.find(c => c.key === selectedTask.status)?.label || "";
+        // Opções de responsável: equipe alocada no projeto (quando conhecida) ou todos os funcionários.
+        const teamMembers = users.filter((u) => project.responsible.includes(u.id));
+        const funcionarios = users.filter((u) => u.role === "funcionario" || u.role === "admin");
+        const responsibleOptions = (teamMembers.length ? teamMembers : funcionarios);
         return (
           <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-8 overflow-y-auto">
             <div className="absolute inset-0 bg-black/60" onClick={() => { setSelectedTask(null); setEditingTitle(false); setEditingDesc(false); }} />
@@ -415,19 +458,31 @@ export function KanbanBoard({ mode, currentUserId = "2" }: KanbanProps) {
                   {/* Members, Labels, Due date row */}
                   <div className="flex flex-wrap gap-6">
                     <div>
-                      <span className="text-[#44546F] block mb-1" style={{ fontSize: 12, fontWeight: 600 }}>Membros</span>
-                      <div className="flex items-center gap-1">
-                        {user && (
-                          <div className="w-8 h-8 rounded-full bg-[#39228C] flex items-center justify-center text-white" style={{ fontSize: 12, fontWeight: 600 }} title={user.name}>
-                            {user.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
-                          </div>
-                        )}
-                        {canEdit && (
-                          <button className="w-8 h-8 rounded-full bg-[#E2E4EA] flex items-center justify-center text-[#44546F] hover:bg-[#D6D9DE]">
-                            <Plus size={14} />
-                          </button>
-                        )}
-                      </div>
+                      <span className="text-[#44546F] block mb-1" style={{ fontSize: 12, fontWeight: 600 }}>Responsável</span>
+                      {canEdit ? (
+                        <select
+                          value={selectedTask.responsible}
+                          onChange={(e) => assignResponsible(selectedTask.id, e.target.value)}
+                          className="px-3 py-1.5 rounded-lg border border-[#C1C7D0] bg-white text-[#1D2125]"
+                          style={{ fontSize: 13 }}
+                        >
+                          <option value="">Não atribuído</option>
+                          {responsibleOptions.map((u) => (
+                            <option key={u.id} value={u.id}>{u.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="flex items-center gap-2 text-[#1D2125]" style={{ fontSize: 13 }}>
+                          {assignedUser ? (
+                            <>
+                              <span className="w-7 h-7 rounded-full bg-[#39228C] flex items-center justify-center text-white" style={{ fontSize: 11, fontWeight: 600 }}>
+                                {assignedUser.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                              </span>
+                              {assignedUser.name}
+                            </>
+                          ) : "Não atribuído"}
+                        </span>
+                      )}
                     </div>
                     <div>
                       <span className="text-[#44546F] block mb-1" style={{ fontSize: 12, fontWeight: 600 }}>Etiquetas</span>
@@ -435,18 +490,23 @@ export function KanbanBoard({ mode, currentUserId = "2" }: KanbanProps) {
                         {labels.map((l, i) => (
                           <span key={i} className={`${l.color} text-white px-3 py-0.5 rounded`} style={{ fontSize: 12 }}>{l.name}</span>
                         ))}
-                        {canEdit && (
-                          <button className="w-6 h-6 rounded bg-[#E2E4EA] flex items-center justify-center text-[#44546F] hover:bg-[#D6D9DE]">
-                            <Plus size={12} />
-                          </button>
-                        )}
                       </div>
                     </div>
                     <div>
                       <span className="text-[#44546F] block mb-1" style={{ fontSize: 12, fontWeight: 600 }}>Data Entrega</span>
-                      <span className="flex items-center gap-1 bg-[#E2E4EA] px-2 py-1 rounded text-[#1D2125]" style={{ fontSize: 13 }}>
-                        <Clock size={12} /> {selectedTask.dueDate}
-                      </span>
+                      {canEdit ? (
+                        <input
+                          type="date"
+                          value={selectedTask.dueDate}
+                          onChange={(e) => changeDueDate(selectedTask.id, e.target.value)}
+                          className="px-2 py-1 rounded-lg border border-[#C1C7D0] bg-white text-[#1D2125]"
+                          style={{ fontSize: 13 }}
+                        />
+                      ) : (
+                        <span className="flex items-center gap-1 bg-[#E2E4EA] px-2 py-1 rounded text-[#1D2125]" style={{ fontSize: 13 }}>
+                          <Clock size={12} /> {selectedTask.dueDate || "Sem data"}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -542,26 +602,6 @@ export function KanbanBoard({ mode, currentUserId = "2" }: KanbanProps) {
                 {/* Right sidebar - actions */}
                 <div className="space-y-2">
                   <span className="text-[#44546F] block mb-1" style={{ fontSize: 12, fontWeight: 600 }}>Ações</span>
-
-                  {canEdit && (
-                    <>
-                      <button className="flex items-center gap-2 w-full px-3 py-2 bg-[#E2E4EA] hover:bg-[#D6D9DE] rounded text-[#44546F] transition-colors" style={{ fontSize: 13 }}>
-                        <UserPlus size={14} /> Membros
-                      </button>
-                      <button className="flex items-center gap-2 w-full px-3 py-2 bg-[#E2E4EA] hover:bg-[#D6D9DE] rounded text-[#44546F] transition-colors" style={{ fontSize: 13 }}>
-                        <Tag size={14} /> Etiquetas
-                      </button>
-                      <button className="flex items-center gap-2 w-full px-3 py-2 bg-[#E2E4EA] hover:bg-[#D6D9DE] rounded text-[#44546F] transition-colors" style={{ fontSize: 13 }}>
-                        <CheckSquare size={14} /> Checklist
-                      </button>
-                      <button className="flex items-center gap-2 w-full px-3 py-2 bg-[#E2E4EA] hover:bg-[#D6D9DE] rounded text-[#44546F] transition-colors" style={{ fontSize: 13 }}>
-                        <Calendar size={14} /> Data
-                      </button>
-                      <button className="flex items-center gap-2 w-full px-3 py-2 bg-[#E2E4EA] hover:bg-[#D6D9DE] rounded text-[#44546F] transition-colors" style={{ fontSize: 13 }}>
-                        <Paperclip size={14} /> Anexo
-                      </button>
-                    </>
-                  )}
 
                   {/* Move card - for admin and funcionario */}
                   {canEdit && (

@@ -85,6 +85,8 @@ export interface AcademyItem {
   description: string;
   price: string;
   image: string;
+  // Link externo (Hotmart, Eduzz, etc.) para onde o aluno é direcionado na compra.
+  url: string;
 }
 
 export interface Announcement {

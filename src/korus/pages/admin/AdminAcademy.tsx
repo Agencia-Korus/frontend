@@ -11,9 +11,10 @@ interface AcademyItem {
   price: string;
   description?: string;
   image: string;
+  url?: string;
 }
 
-const blank: AcademyItem = { id: "", title: "", type: "E-book", price: "Gratuito", description: "", image: "" };
+const blank: AcademyItem = { id: "", title: "", type: "E-book", price: "Gratuito", description: "", image: "", url: "" };
 
 export function AdminAcademy() {
   const { academyItems, createAcademy, updateAcademy, deleteAcademy } = useKorusData();
@@ -25,6 +26,7 @@ export function AdminAcademy() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setItems(academyItems as AcademyItem[]), [academyItems]);
 
   const openNew = () => { setEditing({ ...blank, id: Date.now() }); setUploadError(null); setShowModal(true); };
@@ -157,6 +159,11 @@ export function AdminAcademy() {
               <div>
                 <label className="block mb-1 text-[#000] dark:text-white" style={{ fontSize: 14 }}>Preço</label>
                 <input value={editing.price} onChange={(e) => setEditing({ ...editing, price: e.target.value })} placeholder="Gratuito ou valor" className="w-full px-4 py-2.5 border border-[rgba(103,68,170,0.3)] rounded-lg" />
+              </div>
+              <div>
+                <label className="block mb-1 text-[#000] dark:text-white" style={{ fontSize: 14 }}>Link de compra (externo)</label>
+                <input value={editing.url ?? ""} onChange={(e) => setEditing({ ...editing, url: e.target.value })} placeholder="https://pay.hotmart.com/..." className="w-full px-4 py-2.5 border border-[rgba(103,68,170,0.3)] rounded-lg" />
+                <p className="text-[#6B7280] dark:text-white/50 mt-1" style={{ fontSize: 12 }}>O aluno será direcionado a esta página (Hotmart, Eduzz, etc.) ao clicar em Comprar.</p>
               </div>
               <button onClick={save} className="w-full py-3 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA]">Salvar</button>
             </div>

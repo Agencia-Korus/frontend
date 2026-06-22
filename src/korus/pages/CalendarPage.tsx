@@ -1,102 +1,95 @@
-import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, X, Check, Clock, Calendar as CalIcon, Inbox, CalendarPlus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Plus, X, Check, Clock, Calendar as CalIcon, Inbox, CalendarPlus, ExternalLink, RefreshCw } from "lucide-react";
+import { apiGet, apiPatch, apiPost } from "../api-client";
 
-type EventType = "entrega" | "reuniao" | "pessoal";
-type RequestStatus = "pendente" | "aceita" | "recusada";
+type EventType = "entrega" | "reuniao" | "pessoal" | "tarefa";
+type RequestStatus = "pendente" | "aceita" | "recusada" | "cancelada";
 
-interface Person {
+type SiteEvent = {
   id: string;
-  name: string;
-  role: string;
-  color: string;
-}
+  origem: "local" | "google_calendar";
+  titulo: string;
+  descricao?: string | null;
+  tipo?: string | null;
+  data: string; // YYYY-MM-DD
+  hora?: string | null; // HH:MM:SS
+  duracao_min?: number | null;
+  link?: string | null;
+};
 
-interface CalEvent {
-  id: string;
-  date: string;
-  time?: string;
-  title: string;
-  type: EventType;
-  personId: string;
-}
+type Contato = { id: number; nome: string; role: string };
 
-interface MeetingRequest {
-  id: string;
-  fromId: string;
-  toId: string;
-  date: string;
-  time: string;
-  title: string;
-  message?: string;
+type Solicitacao = {
+  id: number;
+  titulo: string;
+  mensagem?: string | null;
+  data: string;
+  hora: string;
+  remetente_id: number;
+  destinatario_id: number;
   status: RequestStatus;
+};
+
+const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+function pad(n: number) {
+  return String(n).padStart(2, "0");
 }
 
-const people: Person[] = [
-  { id: "ana", name: "Ana Lima", role: "Designer", color: "#39228C" },
-  { id: "bruno", name: "Pedro Souza", role: "Desenvolvedor", color: "#6744AA" },
-  { id: "carla", name: "Tech Solutions", role: "Cliente", color: "#22C55E" },
-  { id: "diego", name: "Carlos Mendes", role: "Administrador", color: "#F59E0B" },
-];
+function dateKey(year: number, month: number, day: number) {
+  return `${year}-${pad(month + 1)}-${pad(day)}`;
+}
 
-const initialEvents: CalEvent[] = [
-  // Ana — funcionária
-  { id: "e1", date: "2026-04-22", time: "10:00", title: "Reunião kickoff", type: "reuniao", personId: "ana" },
-  { id: "e4", date: "2026-05-01", title: "Entrega Logotipo v1", type: "entrega", personId: "ana" },
-  { id: "e6", date: "2026-04-28", time: "15:00", title: "Revisão de moodboard", type: "pessoal", personId: "ana" },
-  // Bruno
-  { id: "e2", date: "2026-04-25", time: "14:30", title: "Review Site Sabor & Arte", type: "entrega", personId: "bruno" },
-  // Diego — admin
-  { id: "e3", date: "2026-04-28", time: "09:00", title: "Sprint Planning", type: "reuniao", personId: "diego" },
-  { id: "e7", date: "2026-05-05", time: "11:00", title: "Alinhamento estratégico", type: "reuniao", personId: "diego" },
-  // Carla — cliente
-  { id: "e5", date: "2026-04-30", time: "16:00", title: "Apresentação da identidade", type: "reuniao", personId: "carla" },
-  { id: "e8", date: "2026-05-08", time: "10:30", title: "Entrega final do projeto", type: "entrega", personId: "carla" },
-];
+function shortTime(hora?: string | null) {
+  return hora ? hora.slice(0, 5) : "";
+}
 
-const initialRequests: MeetingRequest[] = [
-  {
-    id: "r1",
-    fromId: "carla",
-    toId: "ana",
-    date: "2026-04-29",
-    time: "11:00",
-    title: "Ajustes na identidade visual",
-    message: "Gostaria de revisar a paleta antes do fechamento.",
-    status: "pendente",
-  },
-  {
-    id: "r2",
-    fromId: "diego",
-    toId: "bruno",
-    date: "2026-05-02",
-    time: "15:00",
-    title: "Code review do checkout",
-    status: "pendente",
-  },
-];
-
-export function CalendarPage({ title = "Agenda", currentUserId = "ana" }: { title?: string; currentUserId?: string }) {
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 3, 1));
+export function CalendarPage({ title = "Agenda", currentUserId = "" }: { title?: string; currentUserId?: string }) {
+  const meId = Number(currentUserId) || 0;
+  const [currentDate, setCurrentDate] = useState(() => new Date());
   const [view, setView] = useState<"mensal" | "lista" | "solicitacoes">("mensal");
-  const selectedPerson = currentUserId;
-  const me = people.find((p) => p.id === currentUserId);
-  const [events, setEvents] = useState<CalEvent[]>(initialEvents);
-  const [requests, setRequests] = useState<MeetingRequest[]>(initialRequests);
+
+  const [events, setEvents] = useState<SiteEvent[]>([]);
+  const [received, setReceived] = useState<Solicitacao[]>([]);
+  const [sent, setSent] = useState<Solicitacao[]>([]);
+  const [contatos, setContatos] = useState<Contato[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const [showRequest, setShowRequest] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  const [reqForm, setReqForm] = useState({ toId: "bruno", date: "2026-04-30", time: "10:00", title: "", message: "" });
-  const [addForm, setAddForm] = useState<{ type: EventType; title: string; date: string; time: string }>({ type: "pessoal", title: "", date: "2026-04-30", time: "10:00" });
+  const [reqForm, setReqForm] = useState({ toId: "", date: "", time: "10:00", title: "", message: "" });
+  const [addForm, setAddForm] = useState<{ type: EventType; title: string; description: string; date: string; time: string; duracao: number }>(
+    { type: "reuniao", title: "", description: "", date: "", time: "10:00", duracao: 60 },
+  );
 
-  const submitAdd = () => {
-    if (!addForm.title.trim()) return;
-    setEvents((prev) => [
-      ...prev,
-      { id: `e${Date.now()}`, date: addForm.date, time: addForm.time, title: addForm.title, type: addForm.type, personId: selectedPerson },
-    ]);
-    setAddForm({ type: "pessoal", title: "", date: "2026-04-30", time: "10:00" });
-    setShowAdd(false);
-  };
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [ev, ct] = await Promise.all([
+        apiGet<SiteEvent[]>("/agenda/eventos", true),
+        apiGet<Contato[]>("/agenda/contatos", true).catch(() => [] as Contato[]),
+      ]);
+      setEvents(ev);
+      setContatos(ct);
+      if (meId) {
+        const rec = await apiGet<Solicitacao[]>(`/agenda/solicitacoes/recebidas/${meId}`, true).catch(() => [] as Solicitacao[]);
+        setReceived(rec);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível carregar a agenda.");
+    } finally {
+      setLoading(false);
+    }
+  }, [meId]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -108,62 +101,106 @@ export function CalendarPage({ title = "Agenda", currentUserId = "ana" }: { titl
   for (let i = 0; i < firstDay; i++) days.push(null);
   for (let i = 1; i <= daysInMonth; i++) days.push(i);
 
-  const personEvents = useMemo(
-    () => events.filter((e) => e.personId === selectedPerson),
-    [events, selectedPerson]
+  const eventsByDay = useMemo(() => {
+    const map = new Map<string, SiteEvent[]>();
+    for (const e of events) {
+      const list = map.get(e.data) || [];
+      list.push(e);
+      map.set(e.data, list);
+    }
+    return map;
+  }, [events]);
+
+  const sortedEvents = useMemo(
+    () => [...events].sort((a, b) => (a.data + (a.hora || "")).localeCompare(b.data + (b.hora || ""))),
+    [events],
   );
 
-  const acceptedAsEvents = useMemo<CalEvent[]>(
-    () =>
-      requests
-        .filter((r) => r.status === "aceita" && (r.toId === selectedPerson || r.fromId === selectedPerson))
-        .map((r) => ({ id: `req-${r.id}`, date: r.date, time: r.time, title: r.title, type: "reuniao", personId: selectedPerson })),
-    [requests, selectedPerson]
-  );
+  const pendingCount = received.filter((r) => r.status === "pendente").length;
+  const contatoNome = (id: number) => contatos.find((c) => c.id === id)?.nome || `Usuário #${id}`;
 
-  const allShown = [...personEvents, ...acceptedAsEvents];
-
-  const getEventsForDay = (day: number) => {
-    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    return allShown.filter((e) => e.date === dateStr);
-  };
-
-  const myInbox = requests.filter((r) => r.toId === selectedPerson);
-  const mySent = requests.filter((r) => r.fromId === selectedPerson);
-  const pendingCount = myInbox.filter((r) => r.status === "pendente").length;
-
-  const updateRequest = (id: string, status: RequestStatus) => {
-    setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
-  };
-
-  const submitRequest = () => {
-    if (!reqForm.title.trim()) return;
-    setRequests((prev) => [
-      ...prev,
-      {
-        id: `r${Date.now()}`,
-        fromId: selectedPerson,
-        toId: reqForm.toId,
-        date: reqForm.date,
-        time: reqForm.time,
-        title: reqForm.title,
-        message: reqForm.message,
-        status: "pendente",
-      },
-    ]);
-    setReqForm({ toId: "bruno", date: "2026-04-30", time: "10:00", title: "", message: "" });
-    setShowRequest(false);
-  };
-
-  const personName = (id: string) => people.find((p) => p.id === id)?.name ?? id;
-  const personColor = (id: string) => people.find((p) => p.id === id)?.color ?? "#39228C";
-
-  const typeStyles = (type: EventType) =>
-    type === "entrega"
-      ? "bg-[#39228C]/10 text-[#39228C] dark:bg-[#39228C]/30 dark:text-white"
-      : type === "reuniao"
+  const typeStyles = (tipo?: string | null, origem?: string) => {
+    if (origem === "google_calendar") return "bg-[#39228C]/10 text-[#39228C] dark:bg-[#39228C]/30 dark:text-white";
+    return tipo === "entrega"
+      ? "bg-amber-50 text-amber-600 dark:bg-amber-500/20 dark:text-amber-300"
+      : tipo === "reuniao"
       ? "bg-blue-50 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300"
       : "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300";
+  };
+
+  const submitAdd = async () => {
+    if (!addForm.title.trim() || !addForm.date) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiPost("/agenda/eventos", {
+        titulo: addForm.title.trim(),
+        descricao: addForm.description.trim() || null,
+        tipo: addForm.type,
+        data: addForm.date,
+        hora: addForm.time ? `${addForm.time}:00` : null,
+        duracao_min: addForm.duracao,
+        usuario_id: meId,
+      }, true);
+      setShowAdd(false);
+      setAddForm({ type: "reuniao", title: "", description: "", date: "", time: "10:00", duracao: 60 });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao adicionar evento.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitRequest = async () => {
+    if (!reqForm.title.trim() || !reqForm.toId || !reqForm.date) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const created = await apiPost<Solicitacao>("/agenda/solicitacoes", {
+        titulo: reqForm.title.trim(),
+        mensagem: reqForm.message.trim() || null,
+        data: reqForm.date,
+        hora: `${reqForm.time}:00`,
+        remetente_id: meId,
+        destinatario_id: Number(reqForm.toId),
+        status: "pendente",
+      }, true);
+      setSent((prev) => [created, ...prev]);
+      setShowRequest(false);
+      setReqForm({ toId: "", date: "", time: "10:00", title: "", message: "" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao enviar solicitação.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const respondRequest = async (req: Solicitacao, status: "aceita" | "recusada") => {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiPatch(`/agenda/solicitacoes/${req.id}`, { status }, true);
+      setReceived((prev) => prev.map((r) => (r.id === req.id ? { ...r, status } : r)));
+      // Ao aceitar, cria o evento correspondente na agenda (sincroniza com o Google Calendar).
+      if (status === "aceita") {
+        await apiPost("/agenda/eventos", {
+          titulo: req.titulo,
+          descricao: req.mensagem || `Reunião com ${contatoNome(req.remetente_id)}`,
+          tipo: "reuniao",
+          data: req.data,
+          hora: req.hora,
+          duracao_min: 60,
+          usuario_id: meId,
+        }, true).catch(() => undefined);
+        await load();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao responder solicitação.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -171,20 +208,19 @@ export function CalendarPage({ title = "Agenda", currentUserId = "ana" }: { titl
         <div>
           <h2 className="text-[#000] dark:text-white">{title}</h2>
           <p className="text-[#6B7280] dark:text-white/60 flex items-center gap-2" style={{ fontSize: 13 }}>
-            {me && (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-5 h-5 rounded-full flex items-center justify-center text-white" style={{ fontSize: 10, fontWeight: 600, backgroundColor: me.color }}>{me.name.charAt(0)}</span>
-                {me.name} · {me.role}
-              </span>
-            )}
+            <CalIcon size={13} /> Sincronizada com o Google Calendar
+            {loading && <span className="text-[#6744AA]">· carregando...</span>}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 px-4 py-2 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA]" style={{ fontSize: 13 }}>
+          <button onClick={() => { setError(null); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA]" style={{ fontSize: 13 }}>
             <CalendarPlus size={14} /> Adicionar à agenda
           </button>
-          <button onClick={() => setShowRequest(true)} className="flex items-center gap-2 px-4 py-2 border border-[#6744AA] text-[#6744AA] dark:text-[#A78BFA] dark:border-[#A78BFA] rounded-lg hover:bg-[#6744AA]/5 dark:hover:bg-[#A78BFA]/10" style={{ fontSize: 13 }}>
+          <button onClick={() => { setError(null); setShowRequest(true); }} className="flex items-center gap-2 px-4 py-2 border border-[#6744AA] text-[#6744AA] dark:text-[#A78BFA] dark:border-[#A78BFA] rounded-lg hover:bg-[#6744AA]/5 dark:hover:bg-[#A78BFA]/10" style={{ fontSize: 13 }}>
             <Plus size={14} /> Solicitar reunião
+          </button>
+          <button onClick={() => void load()} title="Atualizar" className="flex items-center gap-2 px-3 py-2 bg-[#F3F4F6] dark:bg-[#1A1230] text-[#6B7280] dark:text-white/70 rounded-lg hover:opacity-90" style={{ fontSize: 13 }}>
+            <RefreshCw size={14} />
           </button>
           {(["mensal", "lista", "solicitacoes"] as const).map((v) => (
             <button
@@ -204,6 +240,7 @@ export function CalendarPage({ title = "Agenda", currentUserId = "ana" }: { titl
         </div>
       </div>
 
+      {error && <p className="text-[#EF4444]" style={{ fontSize: 13 }}>{error}</p>}
 
       {view === "mensal" && (
         <div className="bg-white dark:bg-[#130D22] rounded-xl border border-[rgba(103,68,170,0.15)] p-6">
@@ -214,19 +251,19 @@ export function CalendarPage({ title = "Agenda", currentUserId = "ana" }: { titl
           </div>
 
           <div className="grid grid-cols-7 gap-1">
-            {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d) => (
+            {WEEKDAYS.map((d) => (
               <div key={d} className="text-center text-[#6B7280] dark:text-white/60 py-2" style={{ fontSize: 12, fontWeight: 500 }}>{d}</div>
             ))}
             {days.map((day, i) => {
-              const dayEvents = day ? getEventsForDay(day) : [];
+              const dayEvents = day ? eventsByDay.get(dateKey(year, month, day)) || [] : [];
               return (
                 <div key={i} className={`min-h-[80px] p-1 border border-[rgba(103,68,170,0.05)] dark:border-[rgba(103,68,170,0.2)] rounded ${day ? "bg-white dark:bg-[#0C0819]" : ""}`}>
                   {day && (
                     <>
                       <span className="text-[#000] dark:text-white block mb-1" style={{ fontSize: 13 }}>{day}</span>
                       {dayEvents.map((e) => (
-                        <div key={e.id} className={`px-1 py-0.5 rounded mb-0.5 truncate ${typeStyles(e.type)}`} style={{ fontSize: 10 }}>
-                          {e.time ? `${e.time} · ` : ""}{e.title}
+                        <div key={e.id} className={`px-1 py-0.5 rounded mb-0.5 truncate ${typeStyles(e.tipo, e.origem)}`} style={{ fontSize: 10 }} title={e.titulo}>
+                          {shortTime(e.hora) ? `${shortTime(e.hora)} · ` : ""}{e.titulo}
                         </div>
                       ))}
                     </>
@@ -240,22 +277,26 @@ export function CalendarPage({ title = "Agenda", currentUserId = "ana" }: { titl
 
       {view === "lista" && (
         <div className="bg-white dark:bg-[#130D22] rounded-xl border border-[rgba(103,68,170,0.15)] divide-y divide-[rgba(103,68,170,0.1)]">
-          {allShown.length === 0 && (
+          {sortedEvents.length === 0 && (
             <div className="px-4 py-8 text-center text-[#6B7280] dark:text-white/60" style={{ fontSize: 13 }}>
-              Nenhum evento para {personName(selectedPerson)}.
+              Nenhum evento na agenda.
             </div>
           )}
-          {allShown.map((e) => (
+          {sortedEvents.map((e) => (
             <div key={e.id} className="flex items-center gap-4 px-4 py-3">
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: personColor(selectedPerson) }} />
+              <div className={`w-2.5 h-2.5 rounded-full ${e.origem === "google_calendar" ? "bg-[#39228C]" : "bg-[#6744AA]"}`} />
               <div className="flex-1">
-                <p style={{ fontSize: 14, fontWeight: 500 }} className="text-[#000] dark:text-white">{e.title}</p>
+                <p style={{ fontSize: 14, fontWeight: 500 }} className="text-[#000] dark:text-white flex items-center gap-2">
+                  {e.titulo}
+                  {e.link && <a href={e.link} target="_blank" rel="noopener noreferrer" className="text-[#6744AA]"><ExternalLink size={12} /></a>}
+                </p>
                 <p className="text-[#6B7280] dark:text-white/60 flex items-center gap-2" style={{ fontSize: 12 }}>
-                  <CalIcon size={11} /> {e.date}{e.time ? <><Clock size={11} /> {e.time}</> : null}
+                  <CalIcon size={11} /> {e.data}{shortTime(e.hora) ? <><Clock size={11} /> {shortTime(e.hora)}</> : null}
+                  {e.origem === "google_calendar" && <span className="text-[#39228C] dark:text-[#A78BFA]">· Google Calendar</span>}
                 </p>
               </div>
-              <span className={`px-2 py-0.5 rounded ${typeStyles(e.type)}`} style={{ fontSize: 11 }}>
-                {e.type === "entrega" ? "Entrega" : e.type === "reuniao" ? "Reunião" : "Pessoal"}
+              <span className={`px-2 py-0.5 rounded ${typeStyles(e.tipo, e.origem)}`} style={{ fontSize: 11 }}>
+                {e.tipo === "entrega" ? "Entrega" : e.tipo === "reuniao" ? "Reunião" : e.tipo === "tarefa" ? "Tarefa" : "Pessoal"}
               </span>
             </div>
           ))}
@@ -269,15 +310,15 @@ export function CalendarPage({ title = "Agenda", currentUserId = "ana" }: { titl
               <Inbox size={16} className="text-[#39228C] dark:text-[#A78BFA]" />
               <h4 className="text-[#000] dark:text-white" style={{ fontSize: 15, fontWeight: 600 }}>Recebidas</h4>
             </div>
-            {myInbox.length === 0 && <p className="text-[#6B7280] dark:text-white/60" style={{ fontSize: 13 }}>Nenhuma solicitação.</p>}
+            {received.length === 0 && <p className="text-[#6B7280] dark:text-white/60" style={{ fontSize: 13 }}>Nenhuma solicitação.</p>}
             <div className="space-y-3">
-              {myInbox.map((r) => (
+              {received.map((r) => (
                 <div key={r.id} className="border border-[rgba(103,68,170,0.15)] rounded-lg p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
-                      <p className="text-[#000] dark:text-white" style={{ fontSize: 14, fontWeight: 600 }}>{r.title}</p>
-                      <p className="text-[#6B7280] dark:text-white/60" style={{ fontSize: 12 }}>De: {personName(r.fromId)} · {r.date} às {r.time}</p>
-                      {r.message && <p className="text-[#6B7280] dark:text-white/70 mt-2" style={{ fontSize: 12 }}>&quot;{r.message}&quot;</p>}
+                      <p className="text-[#000] dark:text-white" style={{ fontSize: 14, fontWeight: 600 }}>{r.titulo}</p>
+                      <p className="text-[#6B7280] dark:text-white/60" style={{ fontSize: 12 }}>De: {contatoNome(r.remetente_id)} · {r.data} às {shortTime(r.hora)}</p>
+                      {r.mensagem && <p className="text-[#6B7280] dark:text-white/70 mt-2" style={{ fontSize: 12 }}>&quot;{r.mensagem}&quot;</p>}
                     </div>
                     <span className={`px-2 py-0.5 rounded-full ${
                       r.status === "pendente" ? "bg-amber-100 text-amber-700" :
@@ -287,10 +328,10 @@ export function CalendarPage({ title = "Agenda", currentUserId = "ana" }: { titl
                   </div>
                   {r.status === "pendente" && (
                     <div className="flex gap-2 mt-3">
-                      <button onClick={() => updateRequest(r.id, "aceita")} className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-[#22C55E] text-white rounded-lg hover:opacity-90" style={{ fontSize: 12 }}>
+                      <button disabled={busy} onClick={() => respondRequest(r, "aceita")} className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-[#22C55E] text-white rounded-lg hover:opacity-90 disabled:opacity-60" style={{ fontSize: 12 }}>
                         <Check size={12} /> Aceitar
                       </button>
-                      <button onClick={() => updateRequest(r.id, "recusada")} className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-[#EF4444] text-white rounded-lg hover:opacity-90" style={{ fontSize: 12 }}>
+                      <button disabled={busy} onClick={() => respondRequest(r, "recusada")} className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-[#EF4444] text-white rounded-lg hover:opacity-90 disabled:opacity-60" style={{ fontSize: 12 }}>
                         <X size={12} /> Recusar
                       </button>
                     </div>
@@ -303,22 +344,18 @@ export function CalendarPage({ title = "Agenda", currentUserId = "ana" }: { titl
           <div className="bg-white dark:bg-[#130D22] rounded-xl border border-[rgba(103,68,170,0.15)] p-5">
             <div className="flex items-center gap-2 mb-4">
               <CalIcon size={16} className="text-[#6744AA]" />
-              <h4 className="text-[#000] dark:text-white" style={{ fontSize: 15, fontWeight: 600 }}>Enviadas</h4>
+              <h4 className="text-[#000] dark:text-white" style={{ fontSize: 15, fontWeight: 600 }}>Enviadas (nesta sessão)</h4>
             </div>
-            {mySent.length === 0 && <p className="text-[#6B7280] dark:text-white/60" style={{ fontSize: 13 }}>Você ainda não enviou solicitações.</p>}
+            {sent.length === 0 && <p className="text-[#6B7280] dark:text-white/60" style={{ fontSize: 13 }}>Você ainda não enviou solicitações.</p>}
             <div className="space-y-3">
-              {mySent.map((r) => (
+              {sent.map((r) => (
                 <div key={r.id} className="border border-[rgba(103,68,170,0.15)] rounded-lg p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
-                      <p className="text-[#000] dark:text-white" style={{ fontSize: 14, fontWeight: 600 }}>{r.title}</p>
-                      <p className="text-[#6B7280] dark:text-white/60" style={{ fontSize: 12 }}>Para: {personName(r.toId)} · {r.date} às {r.time}</p>
+                      <p className="text-[#000] dark:text-white" style={{ fontSize: 14, fontWeight: 600 }}>{r.titulo}</p>
+                      <p className="text-[#6B7280] dark:text-white/60" style={{ fontSize: 12 }}>Para: {contatoNome(r.destinatario_id)} · {r.data} às {shortTime(r.hora)}</p>
                     </div>
-                    <span className={`px-2 py-0.5 rounded-full ${
-                      r.status === "pendente" ? "bg-amber-100 text-amber-700" :
-                      r.status === "aceita" ? "bg-emerald-100 text-emerald-700" :
-                      "bg-red-100 text-red-700"
-                    }`} style={{ fontSize: 10, fontWeight: 600 }}>{r.status}</span>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700" style={{ fontSize: 10, fontWeight: 600 }}>{r.status}</span>
                   </div>
                 </div>
               ))}
@@ -333,26 +370,18 @@ export function CalendarPage({ title = "Agenda", currentUserId = "ana" }: { titl
           <div className="relative bg-white dark:bg-[#130D22] rounded-2xl max-w-lg w-full p-6">
             <button onClick={() => setShowAdd(false)} className="absolute top-4 right-4 text-[#6B7280]"><X size={20} /></button>
             <h3 className="text-[#000] dark:text-white mb-1">Adicionar à Agenda</h3>
-            <p className="text-[#6B7280] dark:text-white/60 mb-5" style={{ fontSize: 13 }}>Novo evento na agenda de {personName(selectedPerson)}</p>
+            <p className="text-[#6B7280] dark:text-white/60 mb-5" style={{ fontSize: 13 }}>O evento será sincronizado com o Google Calendar.</p>
             <div className="space-y-4">
               <div>
                 <label className="block mb-2 text-[#000] dark:text-white" style={{ fontSize: 13 }}>Tipo</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(["pessoal", "reuniao", "entrega"] as const).map((t) => {
+                <div className="grid grid-cols-4 gap-2">
+                  {(["reuniao", "entrega", "tarefa", "pessoal"] as const).map((t) => {
                     const active = addForm.type === t;
-                    const label = t === "pessoal" ? "Pessoal" : t === "reuniao" ? "Reunião" : "Entrega";
+                    const label = t === "reuniao" ? "Reunião" : t === "entrega" ? "Entrega" : t === "tarefa" ? "Tarefa" : "Pessoal";
                     return (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setAddForm({ ...addForm, type: t })}
-                        className={`px-3 py-2 rounded-lg border transition-colors ${
-                          active
-                            ? "bg-[#39228C] border-[#39228C] text-white"
-                            : "border-[rgba(103,68,170,0.3)] text-[#000] dark:text-white"
-                        }`}
-                        style={{ fontSize: 13 }}
-                      >
+                      <button key={t} type="button" onClick={() => setAddForm({ ...addForm, type: t })}
+                        className={`px-2 py-2 rounded-lg border transition-colors ${active ? "bg-[#39228C] border-[#39228C] text-white" : "border-[rgba(103,68,170,0.3)] text-[#000] dark:text-white"}`}
+                        style={{ fontSize: 12 }}>
                         {label}
                       </button>
                     );
@@ -361,9 +390,13 @@ export function CalendarPage({ title = "Agenda", currentUserId = "ana" }: { titl
               </div>
               <div>
                 <label className="block mb-1 text-[#000] dark:text-white" style={{ fontSize: 13 }}>Título</label>
-                <input value={addForm.title} onChange={(e) => setAddForm({ ...addForm, title: e.target.value })} placeholder="Ex: Estudo de tipografia" className="w-full px-4 py-2.5 border border-[rgba(103,68,170,0.3)] rounded-lg bg-white dark:bg-[#1A1230] dark:text-white" />
+                <input value={addForm.title} onChange={(e) => setAddForm({ ...addForm, title: e.target.value })} placeholder="Ex: Reunião de alinhamento" className="w-full px-4 py-2.5 border border-[rgba(103,68,170,0.3)] rounded-lg bg-white dark:bg-[#1A1230] dark:text-white" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block mb-1 text-[#000] dark:text-white" style={{ fontSize: 13 }}>Descrição (opcional)</label>
+                <textarea value={addForm.description} onChange={(e) => setAddForm({ ...addForm, description: e.target.value })} rows={2} className="w-full px-4 py-2.5 border border-[rgba(103,68,170,0.3)] rounded-lg resize-none bg-white dark:bg-[#1A1230] dark:text-white" />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block mb-1 text-[#000] dark:text-white" style={{ fontSize: 13 }}>Data</label>
                   <input type="date" value={addForm.date} onChange={(e) => setAddForm({ ...addForm, date: e.target.value })} className="w-full px-3 py-2.5 border border-[rgba(103,68,170,0.3)] rounded-lg bg-white dark:bg-[#1A1230] dark:text-white" />
@@ -372,8 +405,12 @@ export function CalendarPage({ title = "Agenda", currentUserId = "ana" }: { titl
                   <label className="block mb-1 text-[#000] dark:text-white" style={{ fontSize: 13 }}>Horário</label>
                   <input type="time" value={addForm.time} onChange={(e) => setAddForm({ ...addForm, time: e.target.value })} className="w-full px-3 py-2.5 border border-[rgba(103,68,170,0.3)] rounded-lg bg-white dark:bg-[#1A1230] dark:text-white" />
                 </div>
+                <div>
+                  <label className="block mb-1 text-[#000] dark:text-white" style={{ fontSize: 13 }}>Duração (min)</label>
+                  <input type="number" min={15} step={15} value={addForm.duracao} onChange={(e) => setAddForm({ ...addForm, duracao: Number(e.target.value) || 60 })} className="w-full px-3 py-2.5 border border-[rgba(103,68,170,0.3)] rounded-lg bg-white dark:bg-[#1A1230] dark:text-white" />
+                </div>
               </div>
-              <button onClick={submitAdd} className="w-full py-3 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA]">Adicionar evento</button>
+              <button onClick={submitAdd} disabled={busy} className="w-full py-3 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA] disabled:opacity-60">{busy ? "Salvando..." : "Adicionar evento"}</button>
             </div>
           </div>
         </div>
@@ -385,15 +422,20 @@ export function CalendarPage({ title = "Agenda", currentUserId = "ana" }: { titl
           <div className="relative bg-white dark:bg-[#130D22] rounded-2xl max-w-lg w-full p-6">
             <button onClick={() => setShowRequest(false)} className="absolute top-4 right-4 text-[#6B7280]"><X size={20} /></button>
             <h3 className="text-[#000] dark:text-white mb-1">Solicitar Reunião</h3>
-            <p className="text-[#6B7280] dark:text-white/60 mb-5" style={{ fontSize: 13 }}>De: {personName(selectedPerson)}</p>
+            <p className="text-[#6B7280] dark:text-white/60 mb-5" style={{ fontSize: 13 }}>Envie um convite de reunião para outro usuário.</p>
             <div className="space-y-4">
               <div>
                 <label className="block mb-1 text-[#000] dark:text-white" style={{ fontSize: 13 }}>Para</label>
-                <select value={reqForm.toId} onChange={(e) => setReqForm({ ...reqForm, toId: e.target.value })} className="w-full px-4 py-2.5 border border-[rgba(103,68,170,0.3)] rounded-lg bg-white dark:bg-[#1A1230] dark:text-white">
-                  {people.filter((p) => p.id !== selectedPerson).map((p) => (
-                    <option key={p.id} value={p.id}>{p.name} — {p.role}</option>
-                  ))}
-                </select>
+                {contatos.length ? (
+                  <select value={reqForm.toId} onChange={(e) => setReqForm({ ...reqForm, toId: e.target.value })} className="w-full px-4 py-2.5 border border-[rgba(103,68,170,0.3)] rounded-lg bg-white dark:bg-[#1A1230] dark:text-white">
+                    <option value="">Selecione...</option>
+                    {contatos.map((p) => (
+                      <option key={p.id} value={p.id}>{p.nome} — {p.role}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-[#6B7280] dark:text-white/60" style={{ fontSize: 13 }}>Nenhum contato disponível.</p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -407,13 +449,13 @@ export function CalendarPage({ title = "Agenda", currentUserId = "ana" }: { titl
               </div>
               <div>
                 <label className="block mb-1 text-[#000] dark:text-white" style={{ fontSize: 13 }}>Assunto</label>
-                <input value={reqForm.title} onChange={(e) => setReqForm({ ...reqForm, title: e.target.value })} placeholder="Ex: Alinhamento de paleta" className="w-full px-4 py-2.5 border border-[rgba(103,68,170,0.3)] rounded-lg bg-white dark:bg-[#1A1230] dark:text-white" />
+                <input value={reqForm.title} onChange={(e) => setReqForm({ ...reqForm, title: e.target.value })} placeholder="Ex: Alinhamento do projeto" className="w-full px-4 py-2.5 border border-[rgba(103,68,170,0.3)] rounded-lg bg-white dark:bg-[#1A1230] dark:text-white" />
               </div>
               <div>
                 <label className="block mb-1 text-[#000] dark:text-white" style={{ fontSize: 13 }}>Mensagem (opcional)</label>
                 <textarea value={reqForm.message} onChange={(e) => setReqForm({ ...reqForm, message: e.target.value })} rows={3} className="w-full px-4 py-2.5 border border-[rgba(103,68,170,0.3)] rounded-lg resize-none bg-white dark:bg-[#1A1230] dark:text-white" />
               </div>
-              <button onClick={submitRequest} className="w-full py-3 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA]">Enviar Solicitação</button>
+              <button onClick={submitRequest} disabled={busy || !contatos.length} className="w-full py-3 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA] disabled:opacity-60">{busy ? "Enviando..." : "Enviar Solicitação"}</button>
             </div>
           </div>
         </div>

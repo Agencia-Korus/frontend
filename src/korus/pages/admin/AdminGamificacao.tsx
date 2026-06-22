@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Plus, Edit, Trash2, X, Zap } from "lucide-react";
+import { apiDelete, apiGet, apiPatch, apiPost } from "../../api-client";
 
 type Complexity = "baixa" | "media" | "alta" | "critica";
 
@@ -10,6 +11,8 @@ interface XpRule {
   xp: number;
 }
 
+type ApiRegraXp = { id: number; tarefa: string; complexidade: Complexity; xp: number };
+
 const complexityMeta: Record<Complexity, { label: string; color: string; defaultXp: number }> = {
   baixa: { label: "Baixa", color: "#22C55E", defaultXp: 10 },
   media: { label: "Média", color: "#3B82F6", defaultXp: 25 },
@@ -17,36 +20,57 @@ const complexityMeta: Record<Complexity, { label: string; color: string; default
   critica: { label: "Crítica", color: "#EF4444", defaultXp: 100 },
 };
 
-const initialRules: XpRule[] = [
-  { id: 1, task: "Comentar em card", complexity: "baixa", xp: 5 },
-  { id: 2, task: "Concluir card de design", complexity: "media", xp: 25 },
-  { id: 3, task: "Entregar projeto completo", complexity: "alta", xp: 50 },
-  { id: 4, task: "Lançar campanha integrada", complexity: "critica", xp: 100 },
-];
-
 export function AdminGamificacao() {
-  const [rules, setRules] = useState<XpRule[]>(initialRules);
+  const [rules, setRules] = useState<XpRule[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<XpRule>({ id: "", task: "", complexity: "media", xp: 25 });
+  const [error, setError] = useState<string | null>(null);
 
-  const openNew = () => { setEditing({ id: Date.now(), task: "", complexity: "media", xp: complexityMeta.media.defaultXp }); setShowModal(true); };
-  const openEdit = (r: XpRule) => { setEditing({ ...r }); setShowModal(true); };
-  const remove = (id: XpRule["id"]) => {
+  const load = useCallback(async () => {
+    try {
+      const remote = await apiGet<ApiRegraXp[]>("/gamificacao/regras?limit=100", true);
+      setRules(remote.map((r) => ({ id: r.id, task: r.tarefa, complexity: r.complexidade, xp: r.xp })));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao carregar regras de XP.");
+    }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
+
+  const openNew = () => { setEditing({ id: "", task: "", complexity: "media", xp: complexityMeta.media.defaultXp }); setError(null); setShowModal(true); };
+  const openEdit = (r: XpRule) => { setEditing({ ...r }); setError(null); setShowModal(true); };
+  const remove = async (id: XpRule["id"]) => {
     if (!confirm("Excluir esta regra de XP?")) return;
-    setRules((prev) => prev.filter((r) => r.id !== id));
+    try {
+      await apiDelete(`/gamificacao/regras/${id}`, true);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao excluir regra.");
+    }
   };
-  const save = () => {
+  const save = async () => {
     if (!editing.task.trim()) return;
-    setRules((prev) => {
-      const exists = prev.find((r) => r.id === editing.id);
-      return exists ? prev.map((r) => (r.id === editing.id ? editing : r)) : [...prev, editing];
-    });
-    setShowModal(false);
+    const payload = { tarefa: editing.task.trim(), complexidade: editing.complexity, xp: editing.xp };
+    try {
+      if (editing.id !== "") {
+        await apiPatch(`/gamificacao/regras/${editing.id}`, payload, true);
+      } else {
+        await apiPost("/gamificacao/regras", payload, true);
+      }
+      setShowModal(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar regra.");
+    }
   };
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       <h2 className="text-[#000] dark:text-white">Gamificação</h2>
+      {error && <p className="text-[#EF4444]" style={{ fontSize: 13 }}>{error}</p>}
 
       <div className="bg-white dark:bg-[#22262E] rounded-xl border border-[rgba(103,68,170,0.15)] p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">

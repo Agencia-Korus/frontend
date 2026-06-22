@@ -65,8 +65,23 @@ type KorusDataContextValue = {
   updateUser: (id: EntityId, payload: Partial<User>) => Promise<void>;
   deleteUser: (id: EntityId) => Promise<void>;
   createAnnouncement: (payload: Partial<Announcement>) => Promise<void>;
+  updateAnnouncement: (id: EntityId, payload: Partial<Announcement>) => Promise<void>;
   deleteAnnouncement: (id: EntityId) => Promise<void>;
-  createProject: (payload: Partial<Project> & { description?: string }) => Promise<void>;
+  createProject: (payload: Partial<Project> & { description?: string }) => Promise<Project>;
+  updateProject: (id: EntityId, payload: Partial<Project> & { description?: string }) => Promise<void>;
+  deleteProject: (id: EntityId) => Promise<void>;
+  addProjectMember: (projectId: EntityId, funcionarioId: EntityId, papel?: string) => Promise<void>;
+  removeProjectMember: (projectId: EntityId, funcionarioId: EntityId) => Promise<void>;
+  googleCalendarIntegration: Integration | null;
+  saveGoogleCalendarIntegration: (payload: { chave?: string; status: "conectado" | "desconectado" }) => Promise<void>;
+};
+
+export type Integration = {
+  id: number;
+  nome: string;
+  chave: string | null;
+  status: "conectado" | "desconectado";
+  atualizado_em: string;
 };
 
 const KorusDataContext = createContext<KorusDataContextValue | null>(null);
@@ -82,6 +97,7 @@ export function KorusDataProvider({ children }: { children: React.ReactNode }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [adminDashboard, setAdminDashboard] = useState<AdminDashboardData | null>(null);
+  const [googleCalendarIntegration, setGoogleCalendarIntegration] = useState<Integration | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -119,21 +135,30 @@ export function KorusDataProvider({ children }: { children: React.ReactNode }) {
       apiGet<ApiAnnouncement[]>("/comunicados?limit=100", true),
     ]);
 
-    if (remoteProjects.status === "fulfilled") setProjects(remoteProjects.value.map(mapProject));
+    if (remoteProjects.status === "fulfilled") {
+      const projetos = remoteProjects.value.map(mapProject);
+      setProjects(projetos);
+      void hydrateEquipe(remoteProjects.value, setProjects);
+    }
     if (remoteTasks.status === "fulfilled") setTasks(remoteTasks.value.map(mapTask));
     if (remoteAnnouncements.status === "fulfilled") setAnnouncements(remoteAnnouncements.value.map(mapAnnouncement));
 
     if (usuarioAtual.role !== "admin") return;
 
-    const [remoteUsers, remoteLeads, remoteDashboard] = await Promise.allSettled([
+    const [remoteUsers, remoteLeads, remoteDashboard, remoteIntegracoes] = await Promise.allSettled([
       apiGet<ApiUser[]>("/usuarios?limit=100", true),
       apiGet<ApiLead[]>("/leads?limit=100", true),
       apiGet<AdminDashboardData>("/dashboard/admin", true),
+      apiGet<Integration[]>("/integracoes?limit=20", true),
     ]);
 
     if (remoteUsers.status === "fulfilled") setUsers(remoteUsers.value.map(mapUser));
     if (remoteLeads.status === "fulfilled") setLeads(remoteLeads.value.map((lead) => mapLead(lead, servicosAtuais)));
     if (remoteDashboard.status === "fulfilled") setAdminDashboard(remoteDashboard.value);
+    if (remoteIntegracoes.status === "fulfilled") {
+      const googleCalendar = remoteIntegracoes.value.find((item) => item.nome === "google_calendar");
+      setGoogleCalendarIntegration(googleCalendar || null);
+    }
   }, []);
 
   const refresh = useCallback(async () => {
@@ -151,6 +176,7 @@ export function KorusDataProvider({ children }: { children: React.ReactNode }) {
   }, [ready, user, loadPublic, loadPrivate]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
 
@@ -250,13 +276,22 @@ export function KorusDataProvider({ children }: { children: React.ReactNode }) {
     await refresh();
   }, [refresh, user]);
 
+  const updateAnnouncement = useCallback(async (id: EntityId, payload: Partial<Announcement>) => {
+    await apiPatch<ApiAnnouncement>(`/comunicados/${id}`, {
+      titulo: payload.title,
+      conteudo: payload.content,
+      alvo: payload.target,
+    }, true);
+    await refresh();
+  }, [refresh]);
+
   const deleteAnnouncement = useCallback(async (id: EntityId) => {
     await apiDelete(`/comunicados/${id}`, true);
     await refresh();
   }, [refresh]);
 
   const createProject = useCallback(async (payload: Partial<Project> & { description?: string }) => {
-    await apiPost<ApiProject>("/projetos", {
+    const created = await apiPost<ApiProject>("/projetos", {
       nome: payload.name,
       descricao: payload.description || "",
       cliente_id: Number(payload.clientId),
@@ -266,7 +301,54 @@ export function KorusDataProvider({ children }: { children: React.ReactNode }) {
       progresso: payload.progress || 0,
     }, true);
     await refresh();
+    return mapProject(created);
   }, [refresh]);
+
+  const updateProject = useCallback(async (id: EntityId, payload: Partial<Project> & { description?: string }) => {
+    await apiPatch<ApiProject>(`/projetos/${id}`, {
+      nome: payload.name,
+      descricao: payload.description,
+      data_inicio: payload.startDate || undefined,
+      data_fim: payload.endDate || undefined,
+      status: payload.status === "a_fazer" ? "planejamento" : payload.status,
+      progresso: payload.progress,
+    }, true);
+    await refresh();
+  }, [refresh]);
+
+  const deleteProject = useCallback(async (id: EntityId) => {
+    await apiDelete(`/projetos/${id}`, true);
+    await refresh();
+  }, [refresh]);
+
+  const addProjectMember = useCallback(async (projectId: EntityId, funcionarioId: EntityId, papel?: string) => {
+    await apiPost(`/projetos/${projectId}/equipe`, {
+      funcionario_id: Number(funcionarioId),
+      papel: papel || null,
+    }, true);
+    await refresh();
+  }, [refresh]);
+
+  const removeProjectMember = useCallback(async (projectId: EntityId, funcionarioId: EntityId) => {
+    await apiDelete(`/projetos/${projectId}/equipe/${funcionarioId}`, true);
+    await refresh();
+  }, [refresh]);
+
+  const saveGoogleCalendarIntegration = useCallback(async (payload: { chave?: string; status: "conectado" | "desconectado" }) => {
+    if (googleCalendarIntegration) {
+      await apiPatch<Integration>(`/integracoes/${googleCalendarIntegration.id}`, {
+        chave: payload.chave,
+        status: payload.status,
+      }, true);
+    } else {
+      await apiPost<Integration>("/integracoes", {
+        nome: "google_calendar",
+        chave: payload.chave || null,
+        status: payload.status,
+      }, true);
+    }
+    await refresh();
+  }, [refresh, googleCalendarIntegration]);
 
   const value = useMemo(
     () => ({
@@ -300,8 +382,15 @@ export function KorusDataProvider({ children }: { children: React.ReactNode }) {
       updateUser,
       deleteUser,
       createAnnouncement,
+      updateAnnouncement,
       deleteAnnouncement,
       createProject,
+      updateProject,
+      deleteProject,
+      addProjectMember,
+      removeProjectMember,
+      googleCalendarIntegration,
+      saveGoogleCalendarIntegration,
     }),
     [
       services,
@@ -334,8 +423,15 @@ export function KorusDataProvider({ children }: { children: React.ReactNode }) {
       updateUser,
       deleteUser,
       createAnnouncement,
+      updateAnnouncement,
       deleteAnnouncement,
       createProject,
+      updateProject,
+      deleteProject,
+      addProjectMember,
+      removeProjectMember,
+      googleCalendarIntegration,
+      saveGoogleCalendarIntegration,
     ],
   );
 
@@ -357,7 +453,7 @@ type ApiAcademy = { id: number; titulo: string; tipo: "ebook" | "curso"; descric
 type ApiLead = { id: number; nome: string; email: string; whatsapp?: string | null; empresa?: string | null; servico_id?: number | null; orcamento?: string | null; prazo_desejado?: string | null; mensagem?: string | null; status: string; prioridade: "alta" | "media" | "baixa"; data: string };
 type ApiUser = { id: number; nome: string; email: string; role: User["role"]; status: User["status"]; avatar?: string | null; telefone?: string | null };
 type ApiProject = { id: number; nome: string; cliente_id: number; status: string; progresso: number; data_inicio?: string | null; data_fim?: string | null };
-type ApiTask = { id: number; projeto_id: number; titulo: string; descricao?: string | null; status: Task["status"]; responsavel_id?: number | null; prazo?: string | null; prioridade: Task["priority"]; categoria?: string | null };
+type ApiTask = { id: number; projeto_id: number; titulo: string; descricao?: string | null; status: string; responsavel_id?: number | null; prazo?: string | null; prioridade: Task["priority"]; categoria?: string | null };
 type ApiAnnouncement = { id: number; titulo: string; conteudo: string; alvo: Announcement["target"]; autor_id: number; data: string };
 
 function mapService(service: ApiService): Service {
@@ -406,6 +502,7 @@ function mapAcademy(item: ApiAcademy): AcademyItem {
     description: item.descricao || "",
     price: price === 0 ? "Gratuito" : price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
     image: item.imagem || IMAGES.branding,
+    url: item.url_externa && item.url_externa !== "#" ? item.url_externa : "",
   };
 }
 
@@ -450,13 +547,38 @@ function mapProject(project: ApiProject): Project {
   };
 }
 
+type ApiProjetoFuncionario = { projeto_id: number; funcionario_id: number; papel?: string | null };
+
+// Carrega a equipe (funcionários alocados) de cada projeto e preenche `responsible`.
+async function hydrateEquipe(remoteProjects: ApiProject[], setProjects: Dispatch<SetStateAction<Project[]>>) {
+  const equipes = await Promise.allSettled(
+    remoteProjects.map((project) => apiGet<ApiProjetoFuncionario[]>(`/projetos/${project.id}/equipe`, true)),
+  );
+  setProjects((current) => current.map((project, index) => {
+    const result = equipes[index];
+    if (!result || result.status !== "fulfilled") return project;
+    return { ...project, responsible: result.value.map((membro) => String(membro.funcionario_id)) };
+  }));
+}
+
+// O backend usa "em_progresso" para a coluna que o frontend chama de "em_andamento".
+// Estas funções traduzem o status entre os dois domínios.
+function taskStatusFromApi(status: string): Task["status"] {
+  return status === "em_progresso" ? "em_andamento" : (status as Task["status"]);
+}
+
+function taskStatusToApi(status?: Task["status"]): string | undefined {
+  if (!status) return undefined;
+  return status === "em_andamento" ? "em_progresso" : status;
+}
+
 function mapTask(task: ApiTask): Task {
   return {
     id: String(task.id),
     projectId: String(task.projeto_id),
     title: task.titulo,
     description: task.descricao || "",
-    status: task.status,
+    status: taskStatusFromApi(task.status),
     responsible: task.responsavel_id ? String(task.responsavel_id) : "",
     dueDate: task.prazo || "",
     priority: task.prioridade,
@@ -507,7 +629,7 @@ function academyPayload(item: EditableAcademyItem) {
     descricao: item.description,
     preco: Number.isFinite(price) ? price : 0,
     imagem: item.image,
-    url_externa: "#",
+    url_externa: item.url?.trim() || "#",
     publicado: true,
   };
 }
@@ -523,9 +645,10 @@ function taskPayload(task: Partial<Task>) {
   return {
     titulo: task.title,
     descricao: task.description,
-    status: task.status,
-    responsavel_id: task.responsible ? Number(task.responsible) : undefined,
-    prazo: task.dueDate,
+    status: taskStatusToApi(task.status),
+    responsavel_id:
+      task.responsible === undefined ? undefined : task.responsible ? Number(task.responsible) : null,
+    prazo: normalizeDate(task.dueDate),
     prioridade: task.priority,
     categoria: task.category,
   };
@@ -538,12 +661,19 @@ function taskCreatePayload(task: Partial<Task>) {
     titulo: task.title || "",
     descricao: task.description || "",
     categoria: task.category || "Geral",
-    prazo: task.dueDate || null,
+    prazo: normalizeDate(task.dueDate) ?? null,
     ordem: 0,
-    status: task.status || "a_fazer",
+    status: taskStatusToApi(task.status) || "a_fazer",
     complexidade: "media",
     prioridade: task.priority || "media",
   };
+}
+
+// A API aceita apenas datas ISO (YYYY-MM-DD). Datas vazias ou em outro formato
+// (ex: dd/mm/yyyy) são descartadas para não quebrar a validação.
+function normalizeDate(value?: string): string | undefined {
+  if (!value) return undefined;
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
 }
 
 function userPayload(user: Partial<User> & { password?: string }) {
