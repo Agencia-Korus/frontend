@@ -138,11 +138,14 @@ class TestAdminJourney:
         click(driver, card)
         comentario = w.until(EC.visibility_of_element_located(
             (By.XPATH, "//input[contains(@placeholder, 'Escreva um comentário')]")))
-        type_text(comentario, "Comentário do admin via E2E.")
+        comentario_txt = "Comentário do admin via E2E."
+        type_text(comentario, comentario_txt)
         click(driver, w.until(EC.element_to_be_clickable(
             (By.XPATH, "//button[contains(., 'Enviar')]"))))
+        # Valida pelo comentário que aparece na thread (durável), não pelo toast
+        # que some sozinho em 3s e torna a asserção instável.
         w.until(EC.visibility_of_element_located(
-            (By.XPATH, "//div[contains(., 'Comentário adicionado')]")))
+            (By.XPATH, f"//p[normalize-space()='{comentario_txt}']")))
 
     def test_07_servicos_criar(self, driver):
         goto(driver, "/admin/servicos")

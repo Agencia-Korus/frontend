@@ -46,11 +46,13 @@ class TestClienteJourney:
         click(driver, cartao)
         comentario = w.until(EC.visibility_of_element_located(
             (By.XPATH, "//input[contains(@placeholder, 'Escreva um comentário')]")))
-        type_text(comentario, "Comentário do cliente via E2E.")
+        comentario_txt = "Comentário do cliente via E2E."
+        type_text(comentario, comentario_txt)
         click(driver, w.until(EC.element_to_be_clickable(
             (By.XPATH, "//button[contains(., 'Enviar')]"))))
+        # Valida pelo comentário na thread (durável), não pelo toast (some em 3s).
         w.until(EC.visibility_of_element_located(
-            (By.XPATH, "//div[contains(., 'Comentário adicionado')]")))
+            (By.XPATH, f"//p[normalize-space()='{comentario_txt}']")))
 
     def test_04_agenda_adicionar_evento(self, driver):
         goto(driver, "/cliente/agenda")

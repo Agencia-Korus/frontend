@@ -21,7 +21,13 @@ import urllib.parse
 import urllib.request
 
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.common.exceptions import (
+    ElementClickInterceptedException,
+    ElementNotInteractableException,
+    StaleElementReferenceException,
+    TimeoutException,
+    WebDriverException,
+)
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -85,6 +91,31 @@ def make_driver() -> webdriver.Chrome:
 
 def wait(driver, timeout: float = DEFAULT_TIMEOUT) -> WebDriverWait:
     return WebDriverWait(driver, timeout)
+
+
+# Indicadores de carregamento exibidos pelas páginas enquanto buscam dados
+# ('Carregando...', '· carregando...', 'Carregando perfil...'). 'arregando'
+# casa tanto 'Carregando' quanto 'carregando'.
+_LOADING_XPATH = "//*[contains(text(), 'arregando')]"
+
+
+def wait_loaded(driver, timeout: float = 12.0) -> None:
+    """Espera os dados assíncronos da página carregarem antes de interagir.
+
+    Com page_load_strategy='eager' o HTML/SSR aparece antes dos fetches do
+    cliente; interagir nesse intervalo lê listas/tabelas/selects ainda vazios e
+    o teste "buga". Aqui aguardamos os indicadores de carregamento sumirem.
+
+    Best-effort e curto: se nenhum indicador existir, retorna na hora; se algum
+    travar, não segura o teste além do timeout (a asserção seguinte decide).
+    """
+    try:
+        # Se um indicador estiver presente agora, espera ele desaparecer.
+        WebDriverWait(driver, timeout).until_not(
+            EC.presence_of_element_located((By.XPATH, _LOADING_XPATH))
+        )
+    except (TimeoutException, WebDriverException):
+        pass
 
 
 def _pause() -> None:
@@ -237,6 +268,9 @@ def goto(driver, path: str) -> None:
     dismiss_cookies(driver)
     if SETTLE:
         time.sleep(SETTLE)
+    # Espera os fetches da página (listas/tabelas/selects) concluírem antes de
+    # qualquer interação, senão o teste lê dados ainda vazios e "buga".
+    wait_loaded(driver)
 
 
 def select_react(driver, select_element, index: int = 0) -> None:
@@ -251,14 +285,42 @@ def select_react(driver, select_element, index: int = 0) -> None:
     _pause()
 
 
-def click(driver, element) -> None:
+def click(driver, element, settle: float = 0.35, retries: int = 6) -> None:
+    """Clica de forma resiliente a modais/animações (framer-motion).
+
+    O elemento pode existir mas ainda estar animando (entrando/saindo) ou
+    coberto por um overlay que esmaece — nesse intervalo o clique nativo é
+    interceptado ou simplesmente não dispara o handler do React, e o teste
+    "trava" esperando algo que nunca abre. Por isso: rola até o centro, dá um
+    pequeno settle para a animação assentar e tenta novamente em vez de cair
+    direto no clique via JS (que atravessaria o overlay e clicaria cedo demais).
+    """
     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
     _pause()
+    last_exc: Exception | None = None
+    for attempt in range(retries):
+        try:
+            element.click()
+            _pause()
+            return
+        except (
+            ElementClickInterceptedException,
+            ElementNotInteractableException,
+            StaleElementReferenceException,
+        ) as exc:
+            # Overlay animando / elemento ainda não interativo: espera e repete.
+            last_exc = exc
+            time.sleep(settle)
+        except WebDriverException as exc:
+            last_exc = exc
+            time.sleep(settle)
+    # Último recurso: clique via JS (dispara mesmo se algo ainda cobre o alvo).
     try:
-        element.click()
-    except WebDriverException:
         driver.execute_script("arguments[0].click();", element)
-    _pause()
+        _pause()
+    except WebDriverException:
+        if last_exc is not None:
+            raise last_exc
 
 
 def _set_react_value(element, text: str) -> None:
@@ -283,9 +345,17 @@ def _set_react_value(element, text: str) -> None:
 
 def type_text(element, text: str) -> None:
     """Digita em um campo e garante o valor final (corrige inputs React que
-    eventualmente perdem caracteres em digitação rápida)."""
-    element.clear()
-    element.send_keys(text)
+    eventualmente perdem caracteres em digitação rápida).
+
+    Se o campo ainda está dentro de um modal animando (não interativo), o
+    send_keys falha; nesse caso cai direto no setter via JS para não travar."""
+    try:
+        element.clear()
+        element.send_keys(text)
+    except (ElementNotInteractableException, WebDriverException):
+        _set_react_value(element, text)
+        _pause()
+        return
     try:
         if (element.get_attribute("value") or "") != text:
             _set_react_value(element, text)
@@ -294,14 +364,38 @@ def type_text(element, text: str) -> None:
     _pause()
 
 
-def set_date(driver, element, value: str) -> None:
+def set_date(driver, element, value: str, retries: int = 5) -> None:
     """Define inputs type=date/time atualizando o estado controlado do React.
 
     Usa o setter do protótipo (não `element.value = ...`), senão o value-tracker
     do React suprime o onChange e o estado fica vazio.
+
+    O valor é confirmado e reaplicado: dentro de um modal recém-animado o
+    primeiro set pode acontecer antes do React terminar de controlar o input
+    (ou ser apagado por um re-render), deixando a data vazia e travando o
+    submit. Reaplica com um pequeno intervalo até o value "pegar".
     """
-    _set_react_value(element, value)
-    _pause()
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+    atual = ""
+    for _ in range(retries):
+        try:
+            # input+change basta para atualizar o estado controlado do React
+            # (mesmo caminho do type_text); blur é evitado porque dispara
+            # revalidação onBlur em alguns formulários e pode limpar o campo.
+            _set_react_value(element, value)
+            atual = element.get_attribute("value") or ""
+            if atual == value:
+                _pause()
+                return
+        except StaleElementReferenceException:
+            atual = "(elemento ficou stale)"
+        time.sleep(0.3)
+    # Falha clara: senão o teste só estoura 30s depois esperando o submit sumir.
+    raise AssertionError(
+        f"Data/hora não foi aplicada no input: esperado {value!r}, "
+        f"value atual {atual!r}. O campo provavelmente ficou vazio e o "
+        f"formulário não vai validar."
+    )
 
 
 def input_by_label(driver, label_text: str, tag: str = "input"):

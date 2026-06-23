@@ -9,9 +9,24 @@ Veja helpers.py para as variáveis de ambiente (URLs, credenciais, HEADLESS,
 CHROME_BINARY).
 """
 
+import os
+import time
+
 import pytest
 
 import helpers
+
+# Pausa entre testes (segundos). Dá tempo para o backend assentar a escrita
+# anterior e para a UI fechar modais/toasts antes do próximo teste começar.
+# Sobrescreva com TEST_DELAY=0 para rodar sem pausa.
+TEST_DELAY = float(os.getenv("TEST_DELAY", "1.5"))
+
+
+@pytest.fixture(autouse=True)
+def _delay_entre_testes():
+    yield
+    if TEST_DELAY:
+        time.sleep(TEST_DELAY)
 
 
 @pytest.fixture(scope="class")
