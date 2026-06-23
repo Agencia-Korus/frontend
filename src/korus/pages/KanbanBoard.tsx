@@ -384,15 +384,6 @@ export function KanbanBoard({ mode, currentUserId = "2" }: KanbanProps) {
             </div>
           );
         })}
-
-        {/* Add list button - only for admin/funcionario */}
-        {canEdit && (
-          <div className="min-w-[272px] w-[272px] flex-shrink-0">
-            <button className="flex items-center gap-1 w-full px-3 py-2.5 rounded-xl bg-white/60 hover:bg-white/80 text-[#44546F] transition-colors" style={{ fontSize: 14 }}>
-              <Plus size={16} /> Adicionar outra lista
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Task Detail Modal */}

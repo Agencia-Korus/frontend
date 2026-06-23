@@ -670,7 +670,6 @@ function taskCreatePayload(task: Partial<Task>) {
     prazo: normalizeDate(task.dueDate) ?? null,
     ordem: 0,
     status: taskStatusToApi(task.status) || "a_fazer",
-    complexidade: "media",
     prioridade: task.priority || "media",
   };
 }
