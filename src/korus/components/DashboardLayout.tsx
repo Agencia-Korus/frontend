@@ -1,7 +1,7 @@
 import { type ReactNode, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "@/src/korus/router-adapter";
 import { KorusLogo, KorusSymbol } from "./KorusLogo";
-import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
+import { ChevronDown, LogOut, Menu } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "../auth-context";
@@ -180,10 +180,6 @@ export function DashboardLayout({ items, userName, userRole, userAvatar, childre
           </div>
           <div className="flex items-center gap-4">
             <ThemeToggle />
-            <button className="relative text-[#6B7280] hover:text-[#39228C] dark:text-white/70 dark:hover:text-white transition-colors">
-              <Bell size={20} />
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-[#EF4444] rounded-full" />
-            </button>
             <div className="flex items-center gap-2">
               {userAvatar ? (
                 <img src={userAvatar} alt={userName} className="w-8 h-8 rounded-full object-cover" />
