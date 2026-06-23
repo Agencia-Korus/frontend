@@ -8,7 +8,16 @@ export function FuncionarioDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { projects, tasks, users, announcements, updateTask } = useKorusData();
-  const currentUser = users.find((u) => u.id === String(user?.id)) || users.find((u) => u.role === "funcionario") || users[1];
+  const currentUser = users.find((u) => u.id === String(user?.id)) || users.find((u) => u.role === "funcionario") || users[0];
+
+  // Enquanto os dados do usuário não chegam, evita acessar `currentUser` indefinido
+  // (causava o "This page couldn't load").
+  if (!currentUser) {
+    return (
+      <div className="py-20 text-center text-[#6B7280]" style={{ fontSize: 14 }}>Carregando...</div>
+    );
+  }
+
   const myTasks = tasks.filter((t) => t.responsible === currentUser.id && t.status !== "concluido");
   const myProjects = projects.filter((p) => p.responsible.includes(currentUser.id!));
   const ranking = users.filter((u) => u.role === "funcionario").sort((a, b) => (b.xp || 0) - (a.xp || 0));
@@ -27,8 +36,8 @@ export function FuncionarioDashboard() {
             <Trophy size={28} className="text-[#F59E0B]" />
           </div>
           <div className="flex-1">
-            <p style={{ fontSize: 14, fontWeight: 500 }} className="text-[#6B7280]">Nível {currentUser.level} — {currentUser.levelName}</p>
-            <p style={{ fontSize: 24, fontWeight: 700 }} className="text-[#000]">{currentUser.xp?.toLocaleString()} XP</p>
+            <p style={{ fontSize: 14, fontWeight: 500 }} className="text-[#6B7280]">Nível {currentUser.level ?? 1}{currentUser.levelName ? ` — ${currentUser.levelName}` : ""}</p>
+            <p style={{ fontSize: 24, fontWeight: 700 }} className="text-[#000]">{(currentUser.xp ?? 0).toLocaleString()} XP</p>
           </div>
         </div>
         <div className="w-full bg-[#F3F4F6] rounded-full h-3">

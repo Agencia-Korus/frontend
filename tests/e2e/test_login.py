@@ -1,95 +1,56 @@
-"""Teste E2E de login no ambiente real (app.korus.lcsgborges.cloud).
+"""Testes E2E de autenticação (login) contra o ambiente real."""
 
-Roda contra o domínio de produção: abre /login, autentica com as credenciais
-e verifica o redirecionamento para a área logada (/admin).
-
-Uso:
-    pip install -r requirements.txt
-    pytest test_login.py -v
-    HEADLESS=0 pytest test_login.py -v
-"""
-
-import os
-import time
-
-from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
 
-BASE_URL = os.getenv("KORUS_BASE_URL", "https://app.korus.lcsgborges.cloud").rstrip("/")
-EMAIL = os.getenv("KORUS_EMAIL", "admin@email.com")
-SENHA = os.getenv("KORUS_SENHA", "AdminKorus@2026")
-
-STEP_DELAY = float(os.getenv("STEP_DELAY", "2"))
+import helpers
 
 
-def _pause():
-    if STEP_DELAY:
-        time.sleep(STEP_DELAY)
+def test_login_admin_redireciona(driver_fn):
+    """Login válido de admin redireciona de /login para /admin."""
+    driver = driver_fn
+    helpers.ui_login(driver, helpers.ADMIN_EMAIL, helpers.ADMIN_SENHA)
+    helpers.wait(driver).until(lambda d: "/admin" in d.current_url)
+    helpers.wait(driver).until(
+        EC.visibility_of_element_located((By.XPATH, "//h2[contains(., 'Dashboard')]"))
+    )
+    assert "/admin" in driver.current_url
 
 
-def _type_slowly(element, text):
-    """Digita caractere a caractere quando em câmera lenta (STEP_DELAY > 0)."""
-    if not STEP_DELAY:
-        element.send_keys(text)
-        return
-    for ch in text:
-        element.send_keys(ch)
-        time.sleep(0.08)
+def test_login_cliente_redireciona(driver_fn):
+    """Login válido de cliente redireciona para /cliente."""
+    driver = driver_fn
+    helpers.ui_login(driver, helpers.CLIENTE_EMAIL, helpers.CLIENTE_SENHA)
+    helpers.wait(driver).until(lambda d: "/cliente" in d.current_url)
+    assert "/cliente" in driver.current_url
 
 
-def _dismiss_cookie_banner(driver):
-    """Fecha o banner de cookies (se aparecer) para não interceptar cliques."""
-    for xpath in (
-        "//button[contains(., 'Aceitar todos')]",
-        "//button[contains(., 'Apenas essenciais')]",
-        "//button[@aria-label='Fechar']",
-    ):
-        try:
-            els = driver.find_elements(By.XPATH, xpath)
-            if els:
-                els[0].click()
-                return
-        except WebDriverException:
-            pass
+def test_login_funcionario_redireciona(driver_fn):
+    """Login válido de funcionário redireciona para /funcionario."""
+    driver = driver_fn
+    helpers.ui_login(driver, helpers.FUNC_EMAIL, helpers.FUNC_SENHA)
+    helpers.wait(driver).until(lambda d: "/funcionario" in d.current_url)
+    assert "/funcionario" in driver.current_url
 
 
-def test_login_admin(driver):
-    wait = WebDriverWait(driver, 25)
-
-    driver.get(f"{BASE_URL}/login")
-    _pause()
-
-    email_input = wait.until(
+def test_login_invalido_mostra_erro(driver_fn):
+    """Credenciais inválidas exibem mensagem de erro e mantêm em /login."""
+    driver = driver_fn
+    helpers.goto(driver, "/login")
+    w = helpers.wait(driver, 30)
+    email_el = w.until(
         EC.visibility_of_element_located((By.CSS_SELECTOR, "input[type='email']"))
     )
-    _dismiss_cookie_banner(driver)
-    _pause()
-
-    senha_input = driver.find_element(By.CSS_SELECTOR, "input[type='password']")
-
-    email_input.clear()
-    _type_slowly(email_input, EMAIL)
-    _pause()
-    senha_input.clear()
-    _type_slowly(senha_input, SENHA)
-    _pause()
-
+    helpers.dismiss_cookies(driver)
+    senha_el = driver.find_element(By.CSS_SELECTOR, "input[type='password']")
+    helpers.type_text(email_el, "naoexiste@email.com")
+    helpers.type_text(senha_el, "senha-errada-123")
     driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
 
-    try:
-        wait.until(lambda d: "/login" not in d.current_url)
-    except TimeoutException:
-        erros = driver.find_elements(By.CSS_SELECTOR, "p[style*='EF4444'], .text-\\[\\#EF4444\\]")
-        msg = erros[0].text if erros else "(sem mensagem de erro visível)"
-        raise AssertionError(
-            f"Login não redirecionou. Continua em {driver.current_url}. Mensagem: {msg}"
+    erro = w.until(
+        EC.visibility_of_element_located(
+            (By.XPATH, "//p[contains(@class, 'EF4444')]")
         )
-
-    assert "/admin" in driver.current_url, (
-        f"Esperava redirect para /admin, mas a URL atual é: {driver.current_url}"
     )
-
-    _pause()
-    _pause()
+    assert erro.text.strip(), "Esperava uma mensagem de erro visível."
+    assert "/login" in driver.current_url

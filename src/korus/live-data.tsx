@@ -143,7 +143,13 @@ export function KorusDataProvider({ children }: { children: React.ReactNode }) {
     if (remoteTasks.status === "fulfilled") setTasks(remoteTasks.value.map(mapTask));
     if (remoteAnnouncements.status === "fulfilled") setAnnouncements(remoteAnnouncements.value.map(mapAnnouncement));
 
-    if (usuarioAtual.role !== "admin") return;
+    if (usuarioAtual.role !== "admin") {
+      // Funcionário/cliente não acessam /usuarios; carrega ao menos o próprio
+      // usuário para que Perfil e Dashboard tenham dados (evita crash).
+      const remoteMe = await apiGet<ApiUser>("/usuarios/me", true).catch(() => null);
+      if (remoteMe) setUsers([mapUser(remoteMe)]);
+      return;
+    }
 
     const [remoteUsers, remoteLeads, remoteDashboard, remoteIntegracoes] = await Promise.allSettled([
       apiGet<ApiUser[]>("/usuarios?limit=100", true),

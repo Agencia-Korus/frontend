@@ -10,13 +10,29 @@ interface ProfilePageProps {
 export function ProfilePage({ userId }: ProfilePageProps) {
   const { users, updateUser } = useKorusData();
   const user = users.find((u) => u.id === userId) || users[0];
-  const [avatar, setAvatar] = useState<string | undefined>(user.avatar);
+  const [avatar, setAvatar] = useState<string | undefined>(user?.avatar);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: user.name, phone: "(61) 99999-0000", currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [form, setForm] = useState({ name: user?.name ?? "", phone: "(61) 99999-0000", currentPassword: "", newPassword: "", confirmPassword: "" });
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => setAvatar(user.avatar), [user.avatar]);
+  useEffect(() => setAvatar(user?.avatar), [user?.avatar]);
+  // Mantém o nome do formulário em sincronia quando o usuário carrega de forma assíncrona.
+  useEffect(() => {
+    if (user?.name) setForm((prev) => (prev.name ? prev : { ...prev, name: user.name }));
+  }, [user?.name]);
+
+  // Enquanto a lista de usuários ainda não carregou, evita acessar campos de `user`
+  // indefinido (causava o "This page couldn't load").
+  if (!user) {
+    return (
+      <div className="max-w-4xl mx-auto py-20 text-center text-[#6B7280] dark:text-white/60" style={{ fontSize: 14 }}>
+        Carregando perfil...
+      </div>
+    );
+  }
 
   const handleAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -126,9 +142,27 @@ export function ProfilePage({ userId }: ProfilePageProps) {
         </div>
       </div>
 
-      <div className="flex justify-end">
-        <button className="px-6 py-3 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA] transition-colors">
-          Salvar Alterações
+      <div className="flex items-center justify-end gap-4">
+        {savedMsg && (
+          <p className={savedMsg.ok ? "text-[#22C55E]" : "text-[#EF4444]"} style={{ fontSize: 13 }}>{savedMsg.text}</p>
+        )}
+        <button
+          onClick={async () => {
+            setSaving(true);
+            setSavedMsg(null);
+            try {
+              await updateUser(user.id, { name: form.name.trim() || user.name });
+              setSavedMsg({ ok: true, text: "Alterações salvas." });
+            } catch (err) {
+              setSavedMsg({ ok: false, text: err instanceof Error ? err.message : "Erro ao salvar." });
+            } finally {
+              setSaving(false);
+            }
+          }}
+          disabled={saving}
+          className="px-6 py-3 bg-[#39228C] text-white rounded-lg hover:bg-[#6744AA] transition-colors disabled:opacity-60"
+        >
+          {saving ? "Salvando..." : "Salvar Alterações"}
         </button>
       </div>
     </div>
