@@ -6,7 +6,6 @@ e verifica o redirecionamento para a área logada (/admin).
 Uso:
     pip install -r requirements.txt
     pytest test_login.py -v
-    # navegador visível:
     HEADLESS=0 pytest test_login.py -v
 """
 
@@ -22,7 +21,6 @@ BASE_URL = os.getenv("KORUS_BASE_URL", "https://app.korus.lcsgborges.cloud").rst
 EMAIL = os.getenv("KORUS_EMAIL", "admin@email.com")
 SENHA = os.getenv("KORUS_SENHA", "AdminKorus@2026")
 
-# Pausa (segundos) entre cada passo, para acompanhar visualmente. STEP_DELAY=0 desliga.
 STEP_DELAY = float(os.getenv("STEP_DELAY", "2"))
 
 
@@ -63,7 +61,6 @@ def test_login_admin(driver):
     driver.get(f"{BASE_URL}/login")
     _pause()
 
-    # Aguarda o formulário carregar (app client-side) e dispensa cookies.
     email_input = wait.until(
         EC.visibility_of_element_located((By.CSS_SELECTOR, "input[type='email']"))
     )
@@ -81,7 +78,6 @@ def test_login_admin(driver):
 
     driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
 
-    # Sucesso => sai de /login e redireciona para /<role> (admin para esse usuário).
     try:
         wait.until(lambda d: "/login" not in d.current_url)
     except TimeoutException:
@@ -95,6 +91,5 @@ def test_login_admin(driver):
         f"Esperava redirect para /admin, mas a URL atual é: {driver.current_url}"
     )
 
-    # Pausa final para visualizar a área logada em câmera lenta.
     _pause()
     _pause()
